@@ -136,11 +136,38 @@ namespace drupaltowp
             MessageBox.Show("Funcionalidad próximamente", "Info", MessageBoxButton.OK, MessageBoxImage.Information);
         }
 
-        private void MigrateUsersButton_Click(object sender, RoutedEventArgs e)
+        private async void MigrateUsersButton_Click(object sender, RoutedEventArgs e)
         {
-            MessageBox.Show("Funcionalidad próximamente", "Info", MessageBoxButton.OK, MessageBoxImage.Information);
-        }
+            try
+            {
+                // Deshabilitar botón mientras migra
+                MigrateUsersButton.IsEnabled = false;
+                StatusTextBlock.Text = ""; // Limpiar status
 
+                // Configurar cliente WordPress
+                var wpClient = new WordPressClient(Urlsitio);
+                wpClient.Auth.UseBasicAuth(Usuario, Password);
+
+                // Crear migrador
+                var migrator = new UserMigratorWPF(DrupalconnectionString, WPconnectionString, wpClient, StatusTextBlock, LogScrollViewer);
+
+                // Ejecutar migración
+                var userMapping = await migrator.MigrateUsersAsync();
+
+                MessageBox.Show($"Migración completada!\n{userMapping.Count} usuarios procesados.",
+                               "Éxito", MessageBoxButton.OK, MessageBoxImage.Information);
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show($"Error en migración: {ex.Message}", "Error",
+                               MessageBoxButton.OK, MessageBoxImage.Error);
+            }
+            finally
+            {
+                // Reactivar botón
+                MigrateUsersButton.IsEnabled = true;
+            }
+        }
         private void MigrateImagesButton_Click(object sender, RoutedEventArgs e)
         {
             MessageBox.Show("Funcionalidad próximamente", "Info", MessageBoxButton.OK, MessageBoxImage.Information);
