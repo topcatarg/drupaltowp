@@ -112,6 +112,11 @@ namespace drupaltowp
 
                 MessageBox.Show($"Migración completada!\n{categoryMapping.Count} categorías migradas.",
                                "Éxito", MessageBoxButton.OK, MessageBoxImage.Information);
+                
+                categoryMapping = await migrator.MigrateCategoriesAsync("bibliteca_categorias");
+
+                MessageBox.Show($"Migración completada!\n{categoryMapping.Count} categorías migradas.",
+                               "Éxito", MessageBoxButton.OK, MessageBoxImage.Information);
             }
             catch (Exception ex)
             {
@@ -149,6 +154,39 @@ namespace drupaltowp
         private void ClearLogButton_Click(object sender, RoutedEventArgs e)
         {
             StatusTextBlock.Text = "";
+        }
+
+        private async void MigrateTagsButton_Click(object sender, RoutedEventArgs e)
+        {
+            try
+            {
+                // Deshabilitar botón mientras migra
+                MigrateTagsButton.IsEnabled = false;
+                StatusTextBlock.Text = ""; // Limpiar status
+
+                // Configurar cliente WordPress
+                var wpClient = new WordPressClient(Urlsitio);
+                wpClient.Auth.UseBasicAuth(Usuario, Password);
+
+                // Crear migrador
+                var migrator = new TagMigratorWPF(DrupalconnectionString, WPconnectionString, wpClient, StatusTextBlock, LogScrollViewer);
+
+                // Ejecutar migración (usar el nombre de tu vocabulario de tags en Drupal)
+                var tagMapping = await migrator.MigrateTagsAsync("tags"); // Cambia "tags" por el nombre real de tu vocabulario
+
+                MessageBox.Show($"Migración completada!\n{tagMapping.Count} tags migrados.",
+                               "Éxito", MessageBoxButton.OK, MessageBoxImage.Information);
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show($"Error en migración: {ex.Message}", "Error",
+                               MessageBoxButton.OK, MessageBoxImage.Error);
+            }
+            finally
+            {
+                // Reactivar botón
+                MigrateTagsButton.IsEnabled = true;
+            }
         }
     }
 }

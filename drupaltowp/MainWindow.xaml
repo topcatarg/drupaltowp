@@ -46,7 +46,13 @@
                     Height="35"
                     Margin="0,5"
                     Padding="5"/>
-
+            
+            <Button Name="MigrateTagsButton" 
+                    Content="Migrar Tags" 
+                    Click="MigrateTagsButton_Click" 
+                    Height="35"
+                    Margin="0,5"
+                    Padding="5"/>
             <!-- Botón de Posts -->
             <Button Name="MigratePostsButton" 
                     Content="Migrar Posts" 
