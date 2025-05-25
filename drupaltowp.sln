@@ -1,0 +1,25 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 17
+VisualStudioVersion = 17.11.35327.3
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "drupaltowp", "drupaltowp\drupaltowp.csproj", "{CF6C1B93-2E8B-4D0B-9D4D-CA4BCE541E78}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{CF6C1B93-2E8B-4D0B-9D4D-CA4BCE541E78}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{CF6C1B93-2E8B-4D0B-9D4D-CA4BCE541E78}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{CF6C1B93-2E8B-4D0B-9D4D-CA4BCE541E78}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{CF6C1B93-2E8B-4D0B-9D4D-CA4BCE541E78}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(ExtensibilityGlobals) = postSolution
+		SolutionGuid = {E407A3D5-F602-4076-BBDB-482E11D9C00B}
+	EndGlobalSection
+EndGlobal
