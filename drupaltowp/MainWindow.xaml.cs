@@ -26,8 +26,8 @@ namespace drupaltowp
 
         private readonly string Urlsitio = "http://localhost/comuwp/wp-json/";
         private readonly string UrlsitioDrupal = "http://localhost/comunicarseweb";
-        private readonly string Usuario = "admin";
-        private readonly string Password = "nblx pVoP rFeT Xz4b H1XC kEtV";
+        private readonly string Usuario = "gonzalo";
+        private readonly string Password = "bDIW xTwv BYsX D776 BA5y dRij";
         private readonly string DrupalconnectionString = "Server=localhost;Database=comunicarseweb;User ID=root;Password=;Port=3306";
         private readonly string WPconnectionString = "Server=localhost;Database=comuwp;User ID=root;Password=;Port=3306";
         public MainWindow()
@@ -65,7 +65,7 @@ namespace drupaltowp
 
             // 2. Conectar a WordPress
             var wpClient = new WordPressClient("http://localhost/comuwp/wp-json/");
-            wpClient.Auth.UseBasicAuth("admin", "nblx pVoP rFeT Xz4b H1XC kEtV");
+            wpClient.Auth.UseBasicAuth("admin", "bDIW xTwv BYsX D776 BA5y dRij");
             //nblx pVoP rFeT Xz4b H1XC kEtV
             //await wpClient.Auth.RequestJWTokenAsync("admin", "nblx pVoP rFeT Xz4b H1XC kEtV");
             
@@ -303,5 +303,217 @@ namespace drupaltowp
                 MigrateTagsButton.IsEnabled = true;
             }
         }
+
+        // AGREGAR ESTOS MÉTODOS NUEVOS AL FINAL DE TU CLASE MainWindow
+
+        #region Métodos Nuevos para Posts
+
+        // Método para verificar prerrequisitos antes de migrar
+        private async void CheckPrerequisitesButton_Click(object sender, RoutedEventArgs e)
+        {
+            try
+            {
+                CheckPrerequisitesButton.IsEnabled = false;
+                StatusTextBlock.Text = "";
+
+                var wpClient = new WordPressClient(Urlsitio);
+                wpClient.Auth.UseBasicAuth(Usuario, Password);
+
+                var migrator = new PostMigratorWPF(DrupalconnectionString, WPconnectionString, wpClient, StatusTextBlock, LogScrollViewer);
+
+                var prereqsOk = await migrator.CheckPrerequisitesAsync();
+
+                if (prereqsOk)
+                {
+                    MessageBox.Show("✅ Todos los prerrequisitos están OK.\n\nPuedes proceder con la migración.",
+                                   "Prerrequisitos OK", MessageBoxButton.OK, MessageBoxImage.Information);
+                }
+                else
+                {
+                    MessageBox.Show("⚠️ Algunos prerrequisitos no se cumplen.\n\nRevisa el log para más detalles.",
+                                   "Prerrequisitos Faltantes", MessageBoxButton.OK, MessageBoxImage.Warning);
+                }
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show($"Error verificando prerrequisitos: {ex.Message}", "Error",
+                               MessageBoxButton.OK, MessageBoxImage.Error);
+            }
+            finally
+            {
+                CheckPrerequisitesButton.IsEnabled = true;
+            }
+        }
+
+        // Método para mostrar estado de migración
+        private async void ShowStatusButton_Click(object sender, RoutedEventArgs e)
+        {
+            try
+            {
+                ShowStatusButton.IsEnabled = false;
+                StatusTextBlock.Text = "";
+
+                var wpClient = new WordPressClient(Urlsitio);
+                wpClient.Auth.UseBasicAuth(Usuario, Password);
+
+                var migrator = new PostMigratorWPF(DrupalconnectionString, WPconnectionString, wpClient, StatusTextBlock, LogScrollViewer);
+
+                await migrator.ShowMigrationStatusAsync();
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show($"Error mostrando estado: {ex.Message}", "Error",
+                               MessageBoxButton.OK, MessageBoxImage.Error);
+            }
+            finally
+            {
+                ShowStatusButton.IsEnabled = true;
+            }
+        }
+
+        // Método para analizar posts antes de migrar
+        private async void AnalyzePostsButton_Click(object sender, RoutedEventArgs e)
+        {
+            try
+            {
+                AnalyzePostsButton.IsEnabled = false;
+                StatusTextBlock.Text = "";
+
+                var wpClient = new WordPressClient(Urlsitio);
+                wpClient.Auth.UseBasicAuth(Usuario, Password);
+
+                var migrator = new PostMigratorWPF(DrupalconnectionString, WPconnectionString, wpClient, StatusTextBlock, LogScrollViewer);
+
+                // Ejecutar análisis
+                await migrator.AnalyzeDrupalPostsAsync();
+
+                // Obtener resumen del análisis
+                var analysisResult = await migrator.GetPostAnalysisAsync();
+
+                var summary = $"RESUMEN DEL ANÁLISIS:\n\n" +
+                             $"📊 Total de posts: {analysisResult.TotalPosts}\n" +
+                             $"🖼️ Posts con imagen destacada: {analysisResult.PostsWithFeaturedImage}\n" +
+                             $"📝 Posts con bajada: {analysisResult.PostsWithBajada}\n\n" +
+                             $"Distribución por tipo:\n";
+
+                foreach (var typeCount in analysisResult.PostCountsByType)
+                {
+                    summary += $"• {typeCount.Key}: {typeCount.Value} posts\n";
+                }
+
+                summary += "\n¿Proceder con la migración?";
+
+                var result = MessageBox.Show(summary, "Análisis Completado",
+                                            MessageBoxButton.YesNo, MessageBoxImage.Question);
+
+                if (result == MessageBoxResult.Yes)
+                {
+                    // Si el usuario acepta, ejecutar migración
+                    await ExecutePostMigrationAsync(migrator);
+                }
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show($"Error en análisis: {ex.Message}\n\nDetalles: {ex.InnerException?.Message}",
+                               "Error", MessageBoxButton.OK, MessageBoxImage.Error);
+            }
+            finally
+            {
+                AnalyzePostsButton.IsEnabled = true;
+            }
+        }
+
+        // Método auxiliar para ejecutar la migración
+        private async Task ExecutePostMigrationAsync(PostMigratorWPF migrator)
+        {
+            var postMapping = await migrator.MigratePostsAsync();
+
+            MessageBox.Show($"Migración completada!\n{postMapping.Count} posts migrados.",
+                           "Éxito", MessageBoxButton.OK, MessageBoxImage.Information);
+        }
+
+        // Método para rollback de posts
+        private async void RollbackPostsButton_Click(object sender, RoutedEventArgs e)
+        {
+            try
+            {
+                RollbackPostsButton.IsEnabled = false;
+                StatusTextBlock.Text = "";
+
+                var wpClient = new WordPressClient(Urlsitio);
+                wpClient.Auth.UseBasicAuth(Usuario, Password);
+
+                var migrator = new PostMigratorWPF(DrupalconnectionString, WPconnectionString, wpClient, StatusTextBlock, LogScrollViewer);
+
+                await migrator.RollbackPostMigrationAsync();
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show($"Error en rollback: {ex.Message}\n\nDetalles: {ex.InnerException?.Message}",
+                               "Error", MessageBoxButton.OK, MessageBoxImage.Error);
+            }
+            finally
+            {
+                RollbackPostsButton.IsEnabled = true;
+            }
+        }
+
+        // Método para validar migración
+        private async void ValidateMigrationButton_Click(object sender, RoutedEventArgs e)
+        {
+            try
+            {
+                ValidateMigrationButton.IsEnabled = false;
+                StatusTextBlock.Text = "";
+
+                var wpClient = new WordPressClient(Urlsitio);
+                wpClient.Auth.UseBasicAuth(Usuario, Password);
+
+                var migrator = new PostMigratorWPF(DrupalconnectionString, WPconnectionString, wpClient, StatusTextBlock, LogScrollViewer);
+
+                await migrator.ValidateMigrationAsync();
+
+                MessageBox.Show("Validación completada. Revisa el log para los resultados.",
+                               "Validación Completada", MessageBoxButton.OK, MessageBoxImage.Information);
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show($"Error en validación: {ex.Message}", "Error",
+                               MessageBoxButton.OK, MessageBoxImage.Error);
+            }
+            finally
+            {
+                ValidateMigrationButton.IsEnabled = true;
+            }
+        }
+
+        // Método para limpiar imágenes migradas
+        private async void CleanupImagesButton_Click(object sender, RoutedEventArgs e)
+        {
+            try
+            {
+                CleanupImagesButton.IsEnabled = false;
+                StatusTextBlock.Text = "";
+
+                var wpClient = new WordPressClient(Urlsitio);
+                wpClient.Auth.UseBasicAuth(Usuario, Password);
+
+                var cleanupTool = new ImageCleanupTool(WPconnectionString, wpClient, StatusTextBlock, LogScrollViewer);
+
+                await cleanupTool.ShowMigrationStatusAsync();
+                await cleanupTool.CleanupMigratedImagesAsync();
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show($"Error en limpieza: {ex.Message}\n\nDetalles: {ex.InnerException?.Message}",
+                               "Error", MessageBoxButton.OK, MessageBoxImage.Error);
+            }
+            finally
+            {
+                CleanupImagesButton.IsEnabled = true;
+            }
+        }
+
+        #endregion
     }
 }

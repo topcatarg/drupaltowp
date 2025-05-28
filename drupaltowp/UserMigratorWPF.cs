@@ -145,7 +145,6 @@ namespace drupaltowp
 
         private string SanitizeUsername(string username)
         {
-            
             if (string.IsNullOrEmpty(username))
                 return "user_" + System.Guid.NewGuid().ToString("N")[..8];
 
@@ -196,7 +195,7 @@ namespace drupaltowp
                 await connection.OpenAsync();
 
                 var query = @"
-                    INSERT INTO wp_user_mapping (drupal_user_id, wp_user_id, migrated_at)
+                    INSERT INTO user_mapping (drupal_user_id, wp_user_id, migrated_at)
                     VALUES (@DrupalUserId, @WpUserId, @MigratedAt)
                     ON DUPLICATE KEY UPDATE 
                         wp_user_id = @WpUserId,
@@ -224,7 +223,4 @@ namespace drupaltowp
             });
         }
     }
-
-    // Modelo para usuario de Drupal
-
 }

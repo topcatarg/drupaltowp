@@ -256,23 +256,23 @@ namespace drupaltowp
 
             // Usuarios
             mappings.Users = (await connection.QueryAsync<UserMappingData>(
-                "SELECT drupal_id as DrupalId, wp_id as WpId, drupal_name as DrupalName, wp_username as WpUsername FROM wp_user_mapping ORDER BY drupal_id")).ToList();
+                "SELECT drupal_user_id as DrupalId, wp_user_id as WpId, drupal_name as DrupalName, wp_username as WpUsername FROM user_mapping ORDER BY drupal_user_id")).ToList();
 
             // Categorías
             mappings.Categories = (await connection.QueryAsync<CategoryMappingData>(
-                "SELECT drupal_id as DrupalId, wp_id as WpId, drupal_name as DrupalName, wp_name as WpName, vocabulary as Vocabulary FROM category_mapping ORDER BY drupal_id")).ToList();
+                "SELECT drupal_category_id as DrupalId, wp_category_id as WpId, drupal_name as DrupalName, wp_name as WpName, vocabulary as Vocabulary FROM category_mapping ORDER BY drupal_category_id")).ToList();
 
             // Tags
             mappings.Tags = (await connection.QueryAsync<TagMappingData>(
-                "SELECT drupal_id as DrupalId, wp_id as WpId, drupal_name as DrupalName, wp_name as WpName FROM tag_mapping ORDER BY drupal_id")).ToList();
+                "SELECT drupal_tag_id as DrupalId, wp_tag_id as WpId, drupal_name as DrupalName, wp_name as WpName FROM tag_mapping ORDER BY drupal_tag_id")).ToList();
 
             // Posts
             mappings.Posts = (await connection.QueryAsync<PostMappingData>(
-                "SELECT drupal_id as DrupalId, wp_id as WpId, created_at as CreatedAt FROM post_mapping ORDER BY created_at DESC")).ToList();
+                "SELECT drupal_post_id as DrupalId, wp_post_id as WpId, migrated_at as CreatedAt FROM post_mapping ORDER BY migrated_at DESC")).ToList();
 
             // Imágenes
             mappings.Media = (await connection.QueryAsync<MediaMappingData>(
-                "SELECT drupal_fid as DrupalFid, wp_id as WpId, drupal_filename as DrupalFilename, wp_url as WpUrl FROM media_mapping ORDER BY drupal_fid")).ToList();
+                "SELECT drupal_file_id as DrupalFid, wp_media_id as WpId, drupal_filename as DrupalFilename, wp_url as WpUrl FROM media_mapping ORDER BY drupal_file_id")).ToList();
 
             return mappings;
         }

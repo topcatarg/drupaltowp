@@ -5,13 +5,13 @@
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
         xmlns:local="clr-namespace:drupaltowp"
         mc:Ignorable="d"
-        Title="Migrador Drupal 7 a WordPress" Height="600" Width="1000"
-        MinHeight="500" MinWidth="800">
+        Title="Migrador Drupal 7 a WordPress" Height="700" Width="1200"
+        MinHeight="600" MinWidth="900">
 
     <Grid>
         <!-- Definir las dos columnas -->
         <Grid.ColumnDefinitions>
-            <ColumnDefinition Width="200" MinWidth="180"/>
+            <ColumnDefinition Width="250" MinWidth="220"/>
             <ColumnDefinition Width="5"/>
             <ColumnDefinition Width="*"/>
         </Grid.ColumnDefinitions>
@@ -24,77 +24,154 @@
                       Background="LightGray"/>
 
         <!-- Panel de botones (columna izquierda) -->
-        <StackPanel Grid.Column="0" Margin="10">
-            <TextBlock Text="MIGRACIÓN" 
-                       FontWeight="Bold" 
-                       FontSize="14" 
-                       Margin="0,0,0,15"
-                       HorizontalAlignment="Center"/>
+        <ScrollViewer Grid.Column="0" VerticalScrollBarVisibility="Auto">
+            <StackPanel Margin="10">
+                <TextBlock Text="MIGRADOR DRUPAL → WP" 
+                           FontWeight="Bold" 
+                           FontSize="14" 
+                           Margin="0,0,0,15"
+                           HorizontalAlignment="Center"
+                           Foreground="DarkBlue"/>
 
-            <!-- Botón de Páginas -->
-            <Button Name="BotonPaginas" 
-                    Content="Migrar Páginas" 
-                    Click="Button_Click" 
-                    Height="35"
-                    Margin="0,5"
-                    Padding="5"/>
+                <!-- Sección de Verificación -->
+                <GroupBox Header="🔍 Verificación" Padding="5" Margin="0,5">
+                    <StackPanel>
+                        <Button Name="CheckPrerequisitesButton" 
+                                Content="✅ Verificar Prerrequisitos" 
+                                Click="CheckPrerequisitesButton_Click" 
+                                Height="32"
+                                Margin="0,2"
+                                Background="LightCyan"
+                                FontSize="11"/>
 
-            <!-- Botón de Categorías -->
-            <Button Name="MigrateCategoriesButton" 
-                    Content="Migrar Categorías" 
-                    Click="MigrateCategoriesButton_Click" 
-                    Height="35"
-                    Margin="0,5"
-                    Padding="5"/>
-            
-            <Button Name="MigrateTagsButton" 
-                    Content="Migrar Tags" 
-                    Click="MigrateTagsButton_Click" 
-                    Height="35"
-                    Margin="0,5"
-                    Padding="5"/>
-            <!-- Botón de Posts -->
-            <Button Name="MigratePostsButton" 
-                    Content="Migrar Posts" 
-                    Click="MigratePostsButton_Click" 
-                    Height="35"
-                    Margin="0,5"
-                    Padding="5"/>
+                        <Button Name="ShowStatusButton" 
+                                Content="📊 Mostrar Estado" 
+                                Click="ShowStatusButton_Click" 
+                                Height="28"
+                                Margin="0,2"
+                                Background="AliceBlue"
+                                FontSize="10"/>
+                    </StackPanel>
+                </GroupBox>
 
-            <!-- Botón de Usuarios -->
-            <Button Name="MigrateUsersButton" 
-                    Content="Migrar Usuarios" 
-                    Click="MigrateUsersButton_Click" 
-                    Height="35"
-                    Margin="0,5"
-                    Padding="5"/>
+                <!-- Sección de Migración Básica -->
+                <GroupBox Header="👥 Usuarios y Taxonomía" Padding="5" Margin="0,5">
+                    <StackPanel>
+                        <Button Name="MigrateUsersButton" 
+                                Content="👥 Migrar Usuarios" 
+                                Click="MigrateUsersButton_Click" 
+                                Height="35"
+                                Margin="0,2"
+                                Background="LightSalmon"
+                                FontWeight="Bold"/>
 
-            <!-- Botón de Imágenes -->
-            <Button Name="MigrateImagesButton" 
-                    Content="Migrar Imágenes" 
-                    Click="MigrateImagesButton_Click" 
-                    Height="35"
-                    Margin="0,5"
-                    Padding="5"/>
+                        <Button Name="MigrateCategoriesButton" 
+                                Content="📂 Migrar Categorías" 
+                                Click="MigrateCategoriesButton_Click" 
+                                Height="35"
+                                Margin="0,2"
+                                Background="LightGoldenrodYellow"
+                                FontWeight="Bold"/>
 
-            <!-- Separador -->
-            <Separator Margin="0,15,0,10"/>
+                        <Button Name="MigrateTagsButton" 
+                                Content="🏷️ Migrar Tags" 
+                                Click="MigrateTagsButton_Click" 
+                                Height="35"
+                                Margin="0,2"
+                                Background="LightPink"
+                                FontWeight="Bold"/>
+                    </StackPanel>
+                </GroupBox>
 
-            <!-- Botones de utilidad -->
-            <Button Name="ClearLogButton" 
-                    Content="Limpiar Log" 
-                    Click="ClearLogButton_Click" 
-                    Height="30"
-                    Margin="0,5"
-                    Background="LightBlue"/>
+                <!-- Sección de Posts -->
+                <GroupBox Header="📝 Posts y Contenido" Padding="5" Margin="0,5">
+                    <StackPanel>
+                        <Button Name="BotonPaginas" 
+                                Content="📄 Migrar Páginas" 
+                                Click="Button_Click" 
+                                Height="35"
+                                Margin="0,2"
+                                Background="Lavender"
+                                FontWeight="Bold"/>
 
-            <Button Name="ExportMappingButton" 
-                    Content="Exportar Mapeos" 
-                    Click="ExportMappingButton_Click" 
-                    Height="30"
-                    Margin="0,5"
-                    Background="LightGreen"/>
-        </StackPanel>
+                        <Button Name="AnalyzePostsButton" 
+                                Content="🔍 Analizar Posts" 
+                                Click="AnalyzePostsButton_Click" 
+                                Height="35"
+                                Margin="0,2"
+                                Background="LightBlue"
+                                FontWeight="Bold"/>
+
+                        <Button Name="MigratePostsButton" 
+                                Content="📝 Migrar Posts" 
+                                Click="MigratePostsButton_Click" 
+                                Height="35"
+                                Margin="0,2"
+                                Background="LightGreen"
+                                FontWeight="Bold"/>
+
+                        <Button Name="RollbackPostsButton" 
+                                Content="🔄 Rollback Posts" 
+                                Click="RollbackPostsButton_Click" 
+                                Height="32"
+                                Margin="0,2"
+                                Background="LightCoral"
+                                FontSize="11"/>
+                    </StackPanel>
+                </GroupBox>
+
+                <!-- Sección de Imágenes -->
+                <GroupBox Header="🖼️ Imágenes" Padding="5" Margin="0,5">
+                    <StackPanel>
+                        <Button Name="MigrateImagesButton" 
+                                Content="📷 Migrar Imágenes" 
+                                Click="MigrateImagesButton_Click" 
+                                Height="35"
+                                Margin="0,2"
+                                Background="LightYellow"
+                                FontWeight="Bold"/>
+
+                        <Button Name="CleanupImagesButton" 
+                                Content="🧹 Limpiar Imágenes" 
+                                Click="CleanupImagesButton_Click" 
+                                Height="30"
+                                Margin="0,2"
+                                Background="MistyRose"
+                                FontSize="10"/>
+                    </StackPanel>
+                </GroupBox>
+
+                <!-- Sección de Herramientas -->
+                <GroupBox Header="🛠️ Herramientas" Padding="5" Margin="0,5">
+                    <StackPanel>
+                        <Button Name="ValidateMigrationButton" 
+                                Content="🔍 Validar Migración" 
+                                Click="ValidateMigrationButton_Click" 
+                                Height="30"
+                                Margin="0,2"
+                                Background="Lavender"
+                                FontSize="10"/>
+
+                        <Button Name="ExportMappingButton" 
+                                Content="📊 Exportar Reporte" 
+                                Click="ExportMappingButton_Click" 
+                                Height="30"
+                                Margin="0,2"
+                                Background="LightGreen"
+                                FontSize="10"/>
+
+                        <Button Name="ClearLogButton" 
+                                Content="📋 Limpiar Log" 
+                                Click="ClearLogButton_Click" 
+                                Height="25"
+                                Margin="0,2"
+                                Background="WhiteSmoke"
+                                FontSize="9"/>
+                    </StackPanel>
+                </GroupBox>
+
+            </StackPanel>
+        </ScrollViewer>
 
         <!-- Panel de log (columna derecha) -->
         <DockPanel Grid.Column="2" Margin="10">
@@ -104,7 +181,8 @@
                        FontWeight="Bold" 
                        FontSize="14" 
                        Margin="0,0,0,10"
-                       HorizontalAlignment="Center"/>
+                       HorizontalAlignment="Center"
+                       Foreground="DarkGreen"/>
 
             <!-- Scroll viewer con el TextBlock -->
             <ScrollViewer Name="LogScrollViewer"
