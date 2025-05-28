@@ -119,7 +119,7 @@ namespace drupaltowp
             await connection.OpenAsync();
 
             var wpId = await connection.QueryFirstOrDefaultAsync<int?>(
-                "SELECT wp_id FROM media_mapping WHERE drupal_fid = @drupalFid",
+                "SELECT wp_media_id FROM media_mapping WHERE drupal_file_id = @drupalFid",
                 new { drupalFid });
 
             return wpId;
@@ -184,10 +184,10 @@ namespace drupaltowp
             var wpMedia = await _wpClient.Media.GetByIDAsync(wpId);
 
             await connection.ExecuteAsync(@"
-                INSERT INTO media_mapping (drupal_fid, wp_id, drupal_filename, wp_filename, drupal_uri, wp_url) 
+                INSERT INTO media_mapping (drupal_file_id, wp_media_id, drupal_filename, wp_filename, drupal_uri, wp_url) 
                 VALUES (@drupalFid, @wpId, @drupalFilename, @wpFilename, @drupalUri, @wpUrl)
                 ON DUPLICATE KEY UPDATE 
-                    wp_id = @wpId, 
+                    wp_media_id = @wpId, 
                     wp_filename = @wpFilename, 
                     wp_url = @wpUrl",
                 new

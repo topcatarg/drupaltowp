@@ -15,14 +15,13 @@ namespace drupaltowp
 {
     internal class CategoryMigratorWPF
     {
-    private readonly string _drupalConnectionString;
+        private readonly string _drupalConnectionString;
         private readonly string _wordpressConnectionString;
         private readonly WordPressClient _wpClient;
         private readonly Dictionary<int, int> _categoryMapping;
         private readonly TextBlock _statusTextBlock;
         private readonly Dispatcher _dispatcher;
-        private readonly ScrollViewer _logScrollViewer; // Agregar esta referencia
-
+        private readonly ScrollViewer _logScrollViewer;
 
         public CategoryMigratorWPF(string drupalConnectionString, string wordpressConnectionString,
                                    WordPressClient wpClient, TextBlock statusTextBlock, ScrollViewer logScrollViewer)
@@ -32,7 +31,7 @@ namespace drupaltowp
             _wpClient = wpClient;
             _categoryMapping = new Dictionary<int, int>();
             _statusTextBlock = statusTextBlock;
-            _logScrollViewer = logScrollViewer; // Agregar esta línea
+            _logScrollViewer = logScrollViewer;
             _dispatcher = _statusTextBlock.Dispatcher;
         }
 
@@ -41,8 +40,6 @@ namespace drupaltowp
             _dispatcher.Invoke(() =>
             {
                 _statusTextBlock.Text += $"{DateTime.Now:HH:mm:ss} - {message}\n";
-
-                // Hacer scroll automático al final
                 _logScrollViewer.ScrollToBottom();
             });
         }
@@ -57,7 +54,7 @@ namespace drupaltowp
                 await CreateMappingTableAsync();
 
                 // 1. Cargar mapeo existente de la BD
-                await LoadExistingMappingAsync("category");
+                await LoadExistingMappingAsync(vocabularyMachineName);
 
                 // 2. Extraer categorías de Drupal 7
                 UpdateStatus("📊 Extrayendo categorías de Drupal 7...");
@@ -93,7 +90,7 @@ namespace drupaltowp
 
                     try
                     {
-                        await MigrateSingleCategoryAsync(drupalCategory);
+                        await MigrateSingleCategoryAsync(drupalCategory, vocabularyMachineName);
                         UpdateStatus($"✅ Migrada: {drupalCategory.Name} (ID: {drupalCategory.Tid})");
                         processed++;
 
@@ -165,7 +162,7 @@ namespace drupaltowp
             return ordered;
         }
 
-        private async Task MigrateSingleCategoryAsync(DrupalCategory drupalCategory)
+        private async Task MigrateSingleCategoryAsync(DrupalCategory drupalCategory, string vocabulary)
         {
             // Verificar si ya existe en WordPress
             var existingCategories = await _wpClient.Categories.GetAllAsync();
@@ -176,7 +173,7 @@ namespace drupaltowp
             {
                 UpdateStatus($"⚠️ Categoría '{drupalCategory.Name}' ya existe en WordPress");
                 _categoryMapping[drupalCategory.Tid] = existing.Id;
-                await SaveMappingAsync("category", drupalCategory.Tid, existing.Id, drupalCategory.Name);
+                await SaveMappingAsync(drupalCategory.Tid, existing.Id, drupalCategory.Name, vocabulary);
                 return;
             }
 
@@ -193,8 +190,8 @@ namespace drupaltowp
                 Name = drupalCategory.Name,
                 Description = drupalCategory.Description ?? string.Empty,
                 Slug = GenerateSlug(drupalCategory.Name),
-
             };
+
             if (wordpressParentId.HasValue && wordpressParentId.Value > 0)
             {
                 wpCategory.Parent = wordpressParentId.Value;
@@ -204,7 +201,7 @@ namespace drupaltowp
             _categoryMapping[drupalCategory.Tid] = createdCategory.Id;
 
             // Guardar mapeo en BD
-            await SaveMappingAsync("category", drupalCategory.Tid, createdCategory.Id, drupalCategory.Name);
+            await SaveMappingAsync(drupalCategory.Tid, createdCategory.Id, drupalCategory.Name, vocabulary);
         }
 
         private string GenerateSlug(string name)
@@ -226,78 +223,79 @@ namespace drupaltowp
                        .Replace("~", "").Replace("`", "");
         }
 
-        #region Métodos para manejo de tabla de mapeo
+        #region Métodos para manejo de tabla de mapeo - CORREGIDOS
 
         private async Task CreateMappingTableAsync()
         {
             const string createTableQuery = @"
-            CREATE TABLE IF NOT EXISTS wp_drupal_migration_mapping (
+            CREATE TABLE IF NOT EXISTS category_mapping (
                 id INT AUTO_INCREMENT PRIMARY KEY,
-                content_type VARCHAR(50) NOT NULL,
-                drupal_id INT NOT NULL,
-                wordpress_id INT NOT NULL,
-                drupal_title VARCHAR(255),
+                drupal_category_id INT NOT NULL,
+                wp_category_id BIGINT UNSIGNED NOT NULL,
+                drupal_name VARCHAR(255),
+                wp_name VARCHAR(255),
+                vocabulary VARCHAR(255),
                 migrated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                INDEX idx_content_drupal (content_type, drupal_id),
-                INDEX idx_content_wordpress (content_type, wordpress_id),
-                UNIQUE KEY unique_mapping (content_type, drupal_id)
-            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci";
+                UNIQUE KEY unique_drupal_category (drupal_category_id, vocabulary),
+                KEY idx_wp_category (wp_category_id)
+            ) ENGINE=InnoDB DEFAULT CHARSET=latin1";
 
             using var connection = new MySqlConnection(_wordpressConnectionString);
             await connection.ExecuteAsync(createTableQuery);
-            UpdateStatus("✅ Tabla de mapeo creada/verificada: wp_drupal_migration_mapping");
+            UpdateStatus("✅ Tabla de mapeo creada/verificada: category_mapping");
         }
 
-        private async Task LoadExistingMappingAsync(string contentType)
+        private async Task LoadExistingMappingAsync(string vocabulary)
         {
             const string query = @"
-            SELECT drupal_id, wordpress_id 
-            FROM wp_drupal_migration_mapping 
-            WHERE content_type = @ContentType";
+            SELECT drupal_category_id, wp_category_id 
+            FROM category_mapping 
+            WHERE vocabulary = @Vocabulary";
 
             using var connection = new MySqlConnection(_wordpressConnectionString);
             var mappings = await connection.QueryAsync<(int DrupalId, int WordPressId)>(
-                query, new { ContentType = contentType });
+                query, new { Vocabulary = vocabulary });
 
             foreach (var (drupalId, wordPressId) in mappings)
             {
                 _categoryMapping[drupalId] = wordPressId;
             }
 
-            UpdateStatus($"✅ Cargados {mappings.Count()} mapeos existentes de {contentType}");
+            UpdateStatus($"✅ Cargados {mappings.Count()} mapeos existentes de categorías para {vocabulary}");
         }
 
-        private async Task SaveMappingAsync(string contentType, int drupalId, int wordpressId, string title = null)
+        private async Task SaveMappingAsync(int drupalId, int wordpressId, string drupalName, string vocabulary)
         {
             const string insertQuery = @"
-            INSERT INTO wp_drupal_migration_mapping 
-            (content_type, drupal_id, wordpress_id, drupal_title) 
-            VALUES (@ContentType, @DrupalId, @WordPressId, @Title)
+            INSERT INTO category_mapping 
+            (drupal_category_id, wp_category_id, drupal_name, vocabulary, migrated_at) 
+            VALUES (@DrupalId, @WordPressId, @DrupalName, @Vocabulary, @MigratedAt)
             ON DUPLICATE KEY UPDATE 
-                wordpress_id = VALUES(wordpress_id),
-                drupal_title = VALUES(drupal_title),
+                wp_category_id = VALUES(wp_category_id),
+                drupal_name = VALUES(drupal_name),
                 migrated_at = CURRENT_TIMESTAMP";
 
             using var connection = new MySqlConnection(_wordpressConnectionString);
             await connection.ExecuteAsync(insertQuery, new
             {
-                ContentType = contentType,
                 DrupalId = drupalId,
                 WordPressId = wordpressId,
-                Title = title
+                DrupalName = drupalName,
+                Vocabulary = vocabulary,
+                MigratedAt = DateTime.Now
             });
         }
 
-        public async Task<Dictionary<int, int>> GetMappingAsync(string contentType)
+        public async Task<Dictionary<int, int>> GetMappingAsync(string vocabulary)
         {
             const string query = @"
-            SELECT drupal_id, wordpress_id 
-            FROM wp_drupal_migration_mapping 
-            WHERE content_type = @ContentType";
+            SELECT drupal_category_id, wp_category_id 
+            FROM category_mapping 
+            WHERE vocabulary = @Vocabulary";
 
             using var connection = new MySqlConnection(_wordpressConnectionString);
             var mappings = await connection.QueryAsync<(int DrupalId, int WordPressId)>(
-                query, new { ContentType = contentType });
+                query, new { Vocabulary = vocabulary });
 
             return mappings.ToDictionary(m => m.DrupalId, m => m.WordPressId);
         }
@@ -305,4 +303,3 @@ namespace drupaltowp
         #endregion
     }
 }
-

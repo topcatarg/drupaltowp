@@ -187,7 +187,7 @@ namespace drupaltowp
                 await connection.OpenAsync();
 
                 var mappings = await connection.QueryAsync<(int DrupalId, int WpId)>(
-                    "SELECT drupal_tag_id, wp_tag_id FROM drupal_wp_tag_mapping"
+                    "SELECT drupal_tag_id, wp_tag_id FROM tag_mapping"
                 );
 
                 return mappings.ToDictionary(m => m.DrupalId, m => m.WpId);
@@ -225,7 +225,7 @@ namespace drupaltowp
                     var batch = newMappings.Skip(i).Take(batchSize);
 
                     await connection.ExecuteAsync(@"
-                        INSERT INTO drupal_wp_tag_mapping (drupal_tag_id, wp_tag_id, tag_name, created_at)
+                        INSERT INTO tag_mapping (drupal_tag_id, wp_tag_id, drupal_name, migrated_at)
                         VALUES (@DrupalId, @WpId, @TagName, NOW())", batch);
 
                     LogMessage($"  ✓ Guardados {Math.Min(i + batchSize, newMappings.Count)}/{newMappings.Count} mapeos");
@@ -250,8 +250,6 @@ namespace drupaltowp
 
             do
             {
-
-
                 TagsQueryBuilder qb = new()
                 {
                     Page = page,
@@ -278,6 +276,7 @@ namespace drupaltowp
 
             return allTags;
         }
+
         private async Task<List<DrupalTag>> GetDrupalTagsAsync(string vocabularyName)
         {
             using var connection = new MySqlConnection(_drupalConnectionString);
@@ -323,7 +322,5 @@ namespace drupaltowp
                 _logScrollViewer.ScrollToEnd();
             });
         }
-
- 
     }
 }
