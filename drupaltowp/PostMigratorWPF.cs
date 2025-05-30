@@ -802,7 +802,6 @@ namespace drupaltowp
             LogMessage($"🧹 Eliminados {deletedMappings} registros de mapping");
         }
         #endregion
-
         #region Métodos de Análisis
 
         public async Task AnalyzeDrupalPostsAsync()
