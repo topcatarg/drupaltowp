@@ -51,6 +51,83 @@
                                 Margin="0,2"
                                 Background="AliceBlue"
                                 FontSize="10"/>
+
+                        <Button Name="AnalyzeDatabaseButton" 
+                                Content="🔍 Analizar BD Completa" 
+                                Click="AnalyzeDatabaseButton_Click" 
+                                Height="28"
+                                Margin="0,2"
+                                Background="LightSteelBlue"
+                                FontSize="10"/>
+                    </StackPanel>
+                </GroupBox>
+
+                <!-- Sección de Análisis de Tipos de Contenido -->
+                <GroupBox Header="🔍 Análisis por Tipo" Padding="5" Margin="0,5">
+                    <StackPanel>
+                        <Button Name="AnalyzeAllTypesButton" 
+                                Content="📋 Todos los Tipos" 
+                                Click="AnalyzeAllTypesButton_Click" 
+                                Height="30"
+                                Margin="0,2"
+                                Background="LightGoldenrodYellow"
+                                FontWeight="Bold"/>
+
+                        <Button Name="AnalyzeBibliotecaButton" 
+                                Content="📚 Biblioteca" 
+                                Click="AnalyzeBibliotecaButton_Click" 
+                                Height="25"
+                                Margin="0,1"
+                                Background="Lavender"
+                                FontSize="9"/>
+
+                        <Button Name="AnalyzePanopolyPageButton" 
+                                Content="📄 Panopoly Page" 
+                                Click="AnalyzePanopolyPageButton_Click" 
+                                Height="25"
+                                Margin="0,1"
+                                Background="Lavender"
+                                FontSize="9"/>
+
+                        <Button Name="AnalyzeAgendaButton" 
+                                Content="📅 Agenda" 
+                                Click="AnalyzeAgendaButton_Click" 
+                                Height="25"
+                                Margin="0,1"
+                                Background="Lavender"
+                                FontSize="9"/>
+
+                        <Button Name="AnalyzeNewsletterButton" 
+                                Content="📰 Newsletter" 
+                                Click="AnalyzeNewsletterButton_Click" 
+                                Height="25"
+                                Margin="0,1"
+                                Background="Lavender"
+                                FontSize="9"/>
+
+                        <Button Name="AnalyzeVideosButton" 
+                                Content="🎥 Videos" 
+                                Click="AnalyzeVideosButton_Click" 
+                                Height="25"
+                                Margin="0,1"
+                                Background="Lavender"
+                                FontSize="9"/>
+
+                        <Button Name="AnalyzeOpinionButton" 
+                                Content="💭 Opinion" 
+                                Click="AnalyzeOpinionButton_Click" 
+                                Height="25"
+                                Margin="0,1"
+                                Background="Lavender"
+                                FontSize="9"/>
+
+                        <Button Name="AnalyzeWebformButton" 
+                                Content="📝 Webform" 
+                                Click="AnalyzeWebformButton_Click" 
+                                Height="25"
+                                Margin="0,1"
+                                Background="Lavender"
+                                FontSize="9"/>
                     </StackPanel>
                 </GroupBox>
 
