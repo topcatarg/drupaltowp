@@ -12,6 +12,7 @@ using System.Net.Http;
 using System.Text.RegularExpressions;
 using System.Collections.Concurrent;
 using System.Windows;
+using drupaltowp.Models;
 
 namespace drupaltowp
 {
@@ -1032,13 +1033,6 @@ namespace drupaltowp
         public int TotalPosts { get; set; }
         public int PostsWithFeaturedImage { get; set; }
         public int PostsWithBajada { get; set; }
-    }
-
-    public class MigratedPostInfo
-    {
-        public int DrupalPostId { get; set; }
-        public int WpPostId { get; set; }
-        public DateTime MigratedAt { get; set; }
     }
 
     public class DrupalPost

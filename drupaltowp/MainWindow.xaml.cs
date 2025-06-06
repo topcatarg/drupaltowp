@@ -8,6 +8,7 @@ using Dapper;
 using drupaltowp.Models;
 using WordPressPCL;
 using WordPressPCL.Models;
+using drupaltowp.ViewModels;
 
 namespace drupaltowp
 {
@@ -18,20 +19,28 @@ namespace drupaltowp
     {
         #region Configuración
 
-        private readonly string Urlsitio = "http://localhost/comuwp/wp-json/";
+        private readonly string Urlsitio = "http://localhost/comunicarsewp/wp-json/";
         private readonly string UrlsitioDrupal = "http://localhost/comunicarseweb";
         private readonly string Usuario = "gonzalo";
-        private readonly string Password = "bDIW xTwv BYsX D776 BA5y dRij";
-        private readonly string DrupalconnectionString = "Server=localhost;Database=comunicarseweb;User ID=root;Password=;Port=3306";
-        private readonly string WPconnectionString = "Server=localhost;Database=comuwp;User ID=root;Password=;Port=3306";
+        private readonly string Password = "suwr haUK hkOu MqTL MnHk NTTz";
+        private readonly string DrupalconnectionString = "Server=localhost;Database=comunicarse_drupal;User ID=root;Password=root;Port=3306";
+        private readonly string WPconnectionString = "Server=localhost;Database=comunicarse_wp;User ID=root;Password=root;Port=3306";
 
         #endregion
 
+        #region ViewModel
+        public LoggerViewModel _loggerViewModel { get; private set; }
+        #endregion
+        BibliotecaMigratorWPF _bibliotecaMigratorWPF;
         public MainWindow()
         {
+            _loggerViewModel = new();
             InitializeComponent();
+            this.DataContext = _loggerViewModel;
+            
         }
 
+        
         #region Métodos de Verificación
 
         private async void CheckPrerequisitesButton_Click(object sender, RoutedEventArgs e)
@@ -664,9 +673,113 @@ namespace drupaltowp
 
         private void ClearLogButton_Click(object sender, RoutedEventArgs e)
         {
-            StatusTextBlock.Text = "";
+            _loggerViewModel.Clear();
         }
 
         #endregion
+
+        // Agregar estos métodos a la clase MainWindow en MainWindow.xaml.cs
+
+        private async void AnalyzeBibliotecaDetailedButton_Click(object sender, RoutedEventArgs e)
+        {
+            try
+            {
+                var button = sender as Button;
+                if (button != null) button.IsEnabled = false;
+
+                StatusTextBlock.Text = "";
+
+                var wpClient = new WordPressClient(Urlsitio);
+                wpClient.Auth.UseBasicAuth(Usuario, Password);
+
+                var migrator = new BibliotecaMigratorWPF(
+                    DrupalconnectionString,
+                    WPconnectionString,
+                    wpClient,
+                    StatusTextBlock,
+                    LogScrollViewer);
+
+                //var analysisResult = await migrator.GetBibliotecaAnalysisAsync();
+                /*
+                var summary = $"ANÁLISIS DETALLADO DE BIBLIOTECA:\n\n" +
+                             $"📊 Total publicaciones: {analysisResult.TotalBiblioteca}\n" +
+                             $"🖼️ Con imagen destacada: {analysisResult.WithFeaturedImage}\n" +
+                             $"📝 Con bajada: {analysisResult.WithBajada}\n" +
+                             $"📄 Con descripción: {analysisResult.WithDescripcion}\n" +
+                             $"👤 Con autor: {analysisResult.WithAutor}\n" +
+                             $"🎥 Con video: {analysisResult.WithVideoUrl}\n" +
+                             $"📎 Con archivo: {analysisResult.WithArchivo}\n" +
+                             $"📂 Con categorías: {analysisResult.WithCategories}\n\n" +
+                             $"¿Proceder con la migración?";
+
+                var result = MessageBox.Show(summary, "Análisis de Biblioteca Completado",
+                                            MessageBoxButton.YesNo, MessageBoxImage.Question);
+
+                if (result == MessageBoxResult.Yes)
+                {
+                    await ExecuteBibliotecaMigrationAsync(migrator);
+                }*/
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show($"Error en análisis: {ex.Message}\n\nDetalles: {ex.InnerException?.Message}",
+                               "Error", MessageBoxButton.OK, MessageBoxImage.Error);
+            }
+            finally
+            {
+                var button = sender as Button;
+                if (button != null) button.IsEnabled = true;
+            }
+        }
+
+        private async void MigrateBibliotecaButton_Click(object sender, RoutedEventArgs e)
+        {
+            try
+            {
+                var button = sender as Button;
+                if (button != null) button.IsEnabled = false;
+
+                StatusTextBlock.Text = "";
+
+                var wpClient = new WordPressClient(Urlsitio);
+                wpClient.Auth.UseBasicAuth(Usuario, Password);
+
+                _bibliotecaMigratorWPF = new BibliotecaMigratorWPF(
+                    DrupalconnectionString,
+                    WPconnectionString,
+                    wpClient,
+                    StatusTextBlock,
+                    LogScrollViewer);
+
+                await ExecuteBibliotecaMigrationAsync();
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show($"Error en migración de biblioteca: {ex.Message}\n\nDetalles: {ex.InnerException?.Message}",
+                               "Error", MessageBoxButton.OK, MessageBoxImage.Error);
+            }
+            finally
+            {
+                var button = sender as Button;
+                if (button != null) button.IsEnabled = true;
+            }
+        }
+
+        private async Task ExecuteBibliotecaMigrationAsync()
+        {
+            var bibliotecaMapping = await _bibliotecaMigratorWPF.MigrateBibliotecaAsync();
+            MessageBox.Show($"Migración de biblioteca completada!\n{bibliotecaMapping.Count} publicaciones migradas.",
+                           "Éxito", MessageBoxButton.OK, MessageBoxImage.Information);
+        }
+
+        private void CancelMigrateBibliotecaButton_Click(object sender, RoutedEventArgs e)
+        {
+            _bibliotecaMigratorWPF.Cancelar = true;
+        }
+
+        private void SmartMigrateImagesButton_Click(object sender, RoutedEventArgs e)
+        {
+            _loggerViewModel.LogMessage("Empieza el proceso inteligente");
+        }
     }
 }

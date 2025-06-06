@@ -18,6 +18,7 @@ namespace drupaltowp.Models
         public int DrupalPostId { get; set; }
         public int WpPostId { get; set; }
         public DateTime MigratedAt { get; set; }
+        public bool Imagenes { get; set; } = false;
     }
 
     public class MigratedImageInfo
