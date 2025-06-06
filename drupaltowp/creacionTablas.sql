@@ -39,14 +39,17 @@ CREATE TABLE IF NOT EXISTS tag_mapping (
 ) ENGINE=InnoDB DEFAULT CHARSET=latin1;
 
 -- Tabla para mapear posts (estandarizada)
-CREATE TABLE IF NOT EXISTS post_mapping (
-    id INT AUTO_INCREMENT PRIMARY KEY,
-    drupal_post_id INT NOT NULL,
-    wp_post_id BIGINT UNSIGNED NOT NULL,
-    migrated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    UNIQUE KEY unique_drupal_post (drupal_post_id),
-    KEY idx_wp_post (wp_post_id)
-) ENGINE=InnoDB DEFAULT CHARSET=latin1;
+
+CREATE TABLE `post_mapping_biblioteca` (
+  `id` int(11) NOT NULL AUTO_INCREMENT,
+  `drupal_post_id` int(11) NOT NULL,
+  `wp_post_id` bigint(20) unsigned NOT NULL,
+  `migrated_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `Imagenes` tinyint(1) DEFAULT NULL,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `unique_drupal_post` (`drupal_post_id`),
+  KEY `idx_wp_post` (`wp_post_id`)
+) ENGINE=InnoDB AUTO_INCREMENT=11081 DEFAULT CHARSET=latin1;
 
 -- Tabla para mapear medios/imágenes (estandarizada)
 CREATE TABLE IF NOT EXISTS media_mapping (

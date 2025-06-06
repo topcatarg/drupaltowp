@@ -22,6 +22,43 @@ namespace drupaltowp.Models
         public List<int> Tags { get; set; } = new();
     }
 
+    // Modelo específico para posts de biblioteca
+    public class BibliotecaPost
+    {
+        public int Nid { get; set; }
+        public string Title { get; set; } = "";
+        public int Uid { get; set; }
+        public int Created { get; set; }
+        public int Changed { get; set; }
+        public int Status { get; set; }
+        public string? Body_Value { get; set; }
+        public int? Field_Adjuntos_Fid { get; set; }
+        public string? Filename { get; set; } // Nombre del archivo adjunto
+        public string? uri { get; set; } // URI del archivo adjunto
+        public string? Field_Bajada_Value { get; set; }
+        public string? Field_Biblioteca_Fecha_De_Alta_Value { get; set; }
+        public int? Field_Categoria_Tid { get; set; }
+        public string? Name { get; set; } // Nombre de la categoría
+        public int? Field_Featured_Categories_Tid { get; set; }
+        public int? Field_Featured_Image_Fid { get; set; }
+        public string? Filename2 { get; set; } // Nombre de la imagen destacada (fm2.filename)
+        public string? uri2 { get; set; } // URI de la imagen destacada (fm2.uri)
+        // Propiedades derivadas para compatibilidad
+        public string? Content => Body_Value;
+        public string? Bajada => Field_Bajada_Value;
+        public string? FechaAlta => Field_Biblioteca_Fecha_De_Alta_Value;
+        public int? ImageFid => Field_Featured_Image_Fid;
+        public string? ImageFilename => Filename2;
+        public int? ArchivoFid => Field_Adjuntos_Fid;
+        public string? ArchivoFilename => Filename;
+        public int? field_tags_tid { get; set; }
+
+        // Lista para múltiples categorías (se llenará por separado)
+        public List<int> Categories { get; set; } = new();
+
+        public List<int> Tags { get; set; } = new();
+    }
+
     // Modelo para usuarios de Drupal
     public class DrupalUser
     {
