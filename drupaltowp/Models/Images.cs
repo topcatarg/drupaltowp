@@ -13,12 +13,30 @@ public class MigratedPostWithImage
     public int WpPostId { get; set; }
     public string PostTitle { get; set; }
     public DateTime PostDate    { get; set; }
-    public int? FeaturedImageFID { get; set; }
-    public string FeaturedImageFilename { get; set; }
-    public string FeaturedImageUri { get; set; }
+
     public bool NeedsGenericImage => PostDate < ConfiguracionGeneral.FechaMinimaImagen;
+    // Todos los archivos asociados
+    public List<PostFile> Files { get; set; } = new();
+
+    // Separados por tipo para fácil acceso
+    public List<PostFile> Images { get; set; } = new();
+    public PostFile FeaturedImage { get; set; }
+    public List<PostFile> ContentImages { get; set; } = new();
+    public List<PostFile> Documents { get; set; } = new();
+
 }
 
+public class PostFile
+{
+    public int Fid { get; set; }
+    public string Filename { get; set; }
+    public string Uri { get; set; }
+    public string Filemime { get; set; }
+    public long Filesize { get; set; }
+    public string Module { get; set; }
+    public string FileType { get; set; } // image, pdf, document, other
+    public bool IsFeaturedImage { get; set; }
+}
 public class DrupalImageInfo
 {
     public int Fid { get; set; }
@@ -68,9 +86,9 @@ public class WordPressMediaInfo
 
 public class ImageMigrationSummary
 {
-    public int TotalPostProcessed { get; set; }
-    public int PostWithGenericImage {  get; set; }
-    public int PostWithOriginalImage { get; set; }
+    public int TotalPostsProcessed { get; set; }
+    public int PostsWithGenericImage {  get; set; }
+    public int PostsWithOriginalImage { get; set; }
     public int FilesProcessed { get; set; }
     public int FilesCopied { get; set; }
     public int FilesSkipped { get; set; }

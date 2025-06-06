@@ -9,7 +9,7 @@ namespace drupaltowp.Configuracion
 {
     internal class ConfiguracionGeneral
     {
-        public static readonly string Urlsitio = "http://localhost/comunicarsewp/wp-json/";
+        public static readonly string UrlsitioWP = "http://localhost/comunicarsewp/wp-json/";
         public static readonly string UrlsitioDrupal = "http://localhost/comunicarseweb";
         public static readonly string Usuario = "gonzalo";
         public static readonly string Password = "suwr haUK hkOu MqTL MnHk NTTz";

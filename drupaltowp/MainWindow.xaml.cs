@@ -9,6 +9,7 @@ using drupaltowp.Models;
 using WordPressPCL;
 using WordPressPCL.Models;
 using drupaltowp.ViewModels;
+using drupaltowp.Clases.Imagenes;
 
 namespace drupaltowp
 {
@@ -777,9 +778,14 @@ namespace drupaltowp
             _bibliotecaMigratorWPF.Cancelar = true;
         }
 
-        private void SmartMigrateImagesButton_Click(object sender, RoutedEventArgs e)
+        private async void SmartMigrateImagesButton_Click(object sender, RoutedEventArgs e)
         {
             _loggerViewModel.LogMessage("Empieza el proceso inteligente");
+            var smartImageMigrator = new SmartImageMigrator(_loggerViewModel);
+            await smartImageMigrator.SmartMigrateImagesAsync();
+
         }
+
+
     }
 }

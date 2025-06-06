@@ -53,7 +53,7 @@ public class LoggerViewModel : INotifyPropertyChanged
     public void LogMessage(string message)
     {
         var timestamp = DateTime.Now.ToString("HH:mm:ss.fff");
-        var entry = $"[{timestamp}] {message}\n";
+        var entry = $"[{timestamp}] {message}";
 
         lock (_lock)
         {
@@ -71,7 +71,7 @@ public class LoggerViewModel : INotifyPropertyChanged
     public void TrimLog()
     {
         var text = _sb.ToString();
-        var lines = text.Split('\n');
+        var lines = text.Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries);
         var keepLines = lines.Length / 2;
 
         _sb.Clear();
