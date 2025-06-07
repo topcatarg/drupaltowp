@@ -98,3 +98,13 @@ public class ImageMigrationSummary
     public TimeSpan Duration => EndTime - StartTime;
 }
 
+public class ContentImageMatch
+{
+    public string OriginalUrl { get; set; }
+    public string Filename { get; set; }
+    public string FullMatch { get; set; }
+    public string CleanPath { get; set; }
+    public int? Fid { get; set; }
+    public bool IsDrupalMediaJson { get; set; }
+}
+
