@@ -107,4 +107,39 @@ public class ContentImageMatch
     public int? Fid { get; set; }
     public bool IsDrupalMediaJson { get; set; }
 }
+/// <summary>
+/// Información de un documento copiado desde Drupal a WordPress
+/// </summary>
+public class CopiedDocumentInfo
+{
+    /// <summary>
+    /// Información del archivo original de Drupal
+    /// </summary>
+    public PostFile OriginalFile { get; set; }
+
+    /// <summary>
+    /// Nombre del archivo copiado (único para evitar conflictos)
+    /// </summary>
+    public string CopiedFilename { get; set; }
+
+    /// <summary>
+    /// ID del media en WordPress
+    /// </summary>
+    public int WpMediaId { get; set; }
+
+    /// <summary>
+    /// URL del archivo en WordPress
+    /// </summary>
+    public string WpUrl { get; set; }
+
+    /// <summary>
+    /// Ruta local del archivo copiado
+    /// </summary>
+    public string LocalPath { get; set; }
+
+    /// <summary>
+    /// Indica si el archivo fue copiado (true) o ya existía (false)
+    /// </summary>
+    public bool WasCopied { get; set; }
+}
 
