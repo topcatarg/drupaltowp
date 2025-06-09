@@ -71,7 +71,6 @@ namespace drupaltowp.Clases.Imagenes
                 // 4. Asignar imagen genérica a posts antiguos (independiente de si tienen archivos)
                 if (MigrarGenerico)
                 {
-
                     if (postsNeedingGeneric.Count > 0)
                     {
                         await AssignGenericImageToPostsAsync(postsNeedingGeneric);
@@ -131,9 +130,6 @@ namespace drupaltowp.Clases.Imagenes
                     filesCopied += contentUpdateResult.ImagesCopied;
                     filesSkipped += contentUpdateResult.ImagesSkipped;
 
-                    // TODO: PASO 3: Procesar documentos/archivos adjuntos  
-                    // foreach (var doc in post.Documents) { ... }
-
                     // Log progreso cada 25 posts
                     if (filesProcessed % 25 == 0)
                     {
@@ -146,6 +142,13 @@ namespace drupaltowp.Clases.Imagenes
                     _logger.LogError($"Error procesando post {post.PostTitle}: {ex.Message}");
                 }
             }
+            // 🚀 PASO 3: Procesar documentos/archivos adjuntos (delegado a DocumentMigrator)
+            var _documentMigrator = new DocumentMigrator(_logger, _wpClient, _mediaMapping);
+
+            var documentsResult = await _documentMigrator.ProcessDocumentsAsync(posts);
+            filesProcessed += documentsResult.DocumentsProcessed;
+            filesCopied += documentsResult.DocumentsCopied;
+            filesSkipped += documentsResult.DocumentsSkipped;
 
             _logger.LogSuccess($"Archivos: {filesCopied:N0} migrados, {filesSkipped:N0} ya existían");
             return (filesProcessed, filesCopied, filesSkipped);
