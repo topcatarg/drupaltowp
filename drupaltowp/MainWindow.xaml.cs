@@ -1,15 +1,16 @@
-﻿using System;
+﻿using Dapper;
+using drupaltowp.Clases.Imagenes;
+using drupaltowp.Clases.Publicaciones.Panopoly;
+using drupaltowp.Models;
+using drupaltowp.ViewModels;
+using System;
 using System.Collections.Generic;
 using System.Text;
 using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
-using Dapper;
-using drupaltowp.Models;
 using WordPressPCL;
 using WordPressPCL.Models;
-using drupaltowp.ViewModels;
-using drupaltowp.Clases.Imagenes;
 
 namespace drupaltowp
 {
@@ -33,15 +34,16 @@ namespace drupaltowp
         public LoggerViewModel _loggerViewModel { get; private set; }
         #endregion
         BibliotecaMigratorWPF _bibliotecaMigratorWPF;
+        PanopolyMigrator _panopolyMigrator;
         public MainWindow()
         {
             _loggerViewModel = new();
             InitializeComponent();
             this.DataContext = _loggerViewModel;
-            
+
         }
 
-        
+
         #region Métodos de Verificación
 
         private async void CheckPrerequisitesButton_Click(object sender, RoutedEventArgs e)
@@ -786,6 +788,42 @@ namespace drupaltowp
 
         }
 
+        private async void MigratePanopolyPagesButton_Click(object sender, RoutedEventArgs e)
+        {
+            try
+            {
+                _loggerViewModel.LogMessage("Iniciando migración de páginas Panopoly...");
+                var button = sender as Button;
+                if (button != null) button.IsEnabled = false;
 
+                _panopolyMigrator = new PanopolyMigrator(_loggerViewModel);
+
+                // Ejecutar migración completa
+                var result = await _panopolyMigrator.MigratePanopolyPagesAsync();
+
+                MessageBox.Show($"✅ Migración completada.\n\nPáginas procesadas: {result.Count:N0}",
+                               "Migración Completada", MessageBoxButton.OK, MessageBoxImage.Information);
+
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show($"❌ Error en migración: {ex.Message}\n\nDetalles: {ex.InnerException?.Message}",
+                               "Error", MessageBoxButton.OK, MessageBoxImage.Error);
+            }
+            finally
+            {
+                var button = sender as Button;
+                if (button != null) button.IsEnabled = true;
+            }
+        }
+
+        private async void CancelPanopolyButton_Click(object sender, RoutedEventArgs e)
+        {
+            if (_panopolyMigrator != null)
+            {
+                _loggerViewModel.LogMessage("Cancelando migración de Panopoly...");
+                _panopolyMigrator.Cancelar = true;
+            }
+        }
     }
 }
