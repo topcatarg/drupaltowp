@@ -219,6 +219,22 @@ Height="35"
 Margin="0,2"
 Background="LightCyan"
 FontWeight="Bold"/>
+                        <Button Name="MigratePanopolyPagesButton" 
+        Content="📄 Migrar Páginas Panopoly" 
+
+                                
+        Height="35"
+        Margin="0,2"
+        Background="LightGreen"
+        FontWeight="Bold" Click="MigratePanopolyPagesButton_Click"/>
+                        <Button Name="CancelPanopolyButton" 
+Content="📚 Cancelar Migracion Biblioteca" 
+
+                                
+Height="35"
+Margin="0,2"
+Background="LightCyan"
+FontWeight="Bold" Click="CancelPanopolyButton_Click"/>
                     </StackPanel>
 
                 </GroupBox>
