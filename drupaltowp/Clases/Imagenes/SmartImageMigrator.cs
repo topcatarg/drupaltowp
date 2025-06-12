@@ -685,6 +685,7 @@ namespace drupaltowp.Clases.Imagenes
                 _mediaMapping = [];
             }
         }
+
         #region imagen generica
         private async Task EnsureGenericImageExistsAsync()
         {
