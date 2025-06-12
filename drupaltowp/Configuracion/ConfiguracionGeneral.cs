@@ -19,6 +19,8 @@ namespace drupaltowp.Configuracion
         public static readonly string WPFileRoute = "C:\\datos\\source\\Repos\\Docker-Composes\\Apache y mysql\\web\\comunicarsewp\\wp-content\\uploads";
         public static readonly string WPGenericImageFileName = "generic-post-image.png";
         public static readonly string DrupalGenericImageFileName = "webp.net-resizeimage_1.png";
-        public static readonly DateTime FechaMinimaImagen = new DateTime(2022, 1, 1);
+        public static readonly DateTime FechaMinimaImagen = new(2022, 1, 1);
+        public static readonly string LogFilePath = @"C:\temp\drupaltowp_migration.log";
+
     }
 }
