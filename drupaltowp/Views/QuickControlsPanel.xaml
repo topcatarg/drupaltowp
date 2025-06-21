@@ -8,6 +8,9 @@
              d:DataContext="{d:DesignInstance Type=viewmodels:QuickControlsViewModel}">
 
     <UserControl.Resources>
+        <!-- Converter para Boolean a Visibility -->
+        <BooleanToVisibilityConverter x:Key="BooleanToVisibilityConverter"/>
+
         <Style x:Key="QuickButton" TargetType="Button">
             <Setter Property="Height" Value="40"/>
             <Setter Property="Margin" Value="5"/>
@@ -29,10 +32,44 @@
                             <Trigger Property="IsMouseOver" Value="True">
                                 <Setter Property="Opacity" Value="0.8"/>
                             </Trigger>
+                            <Trigger Property="IsEnabled" Value="False">
+                                <Setter Property="Opacity" Value="0.5"/>
+                            </Trigger>
                         </ControlTemplate.Triggers>
                     </ControlTemplate>
                 </Setter.Value>
             </Setter>
+        </Style>
+
+        <!-- Estilo especial para el botón de cancelar -->
+        <Style x:Key="CancelButton" TargetType="Button" BasedOn="{StaticResource QuickButton}">
+            <Setter Property="Background" Value="#E74C3C"/>
+            <Style.Triggers>
+                <!-- Cuando hay operación en progreso, usar color más intenso -->
+                <DataTrigger Binding="{Binding IsOperationInProgress}" Value="True">
+                    <Setter Property="Background" Value="#C0392B"/>
+                </DataTrigger>
+                <!-- Animación de pulso cuando hay operación activa -->
+                <DataTrigger Binding="{Binding IsOperationInProgress}" Value="True">
+                    <DataTrigger.EnterActions>
+                        <BeginStoryboard>
+                            <Storyboard RepeatBehavior="Forever">
+                                <DoubleAnimation Storyboard.TargetProperty="Opacity"
+                                               From="1.0" To="0.6" Duration="0:0:1"
+                                               AutoReverse="True"/>
+                            </Storyboard>
+                        </BeginStoryboard>
+                    </DataTrigger.EnterActions>
+                    <DataTrigger.ExitActions>
+                        <BeginStoryboard>
+                            <Storyboard>
+                                <DoubleAnimation Storyboard.TargetProperty="Opacity"
+                                               To="1.0" Duration="0:0:0.2"/>
+                            </Storyboard>
+                        </BeginStoryboard>
+                    </DataTrigger.ExitActions>
+                </DataTrigger>
+            </Style.Triggers>
         </Style>
     </UserControl.Resources>
 
@@ -44,22 +81,57 @@
                        HorizontalAlignment="Center"
                        Foreground="#2C3E50"/>
 
-            <UniformGrid Columns="3">
-                <Button Content="🧹 Limpiar Log" 
+            <!-- Indicador de estado de operación -->
+            <Border Background="#ECF0F1" 
+                    CornerRadius="4" 
+                    Padding="8,4" 
+                    Margin="0,0,0,10"
+                    Visibility="{Binding IsOperationInProgress, Converter={StaticResource BooleanToVisibilityConverter}}">
+                <StackPanel Orientation="Horizontal" HorizontalAlignment="Center">
+                    <TextBlock Text="🔄" FontSize="14" VerticalAlignment="Center" Margin="0,0,5,0"/>
+                    <TextBlock Text="{Binding CurrentOperationName}" 
+                               FontWeight="SemiBold" 
+                               VerticalAlignment="Center"
+                               Foreground="#2C3E50"/>
+                    <TextBlock Text=" en progreso..." 
+                               VerticalAlignment="Center"
+                               Foreground="#7F8C8D"/>
+                </StackPanel>
+            </Border>
+
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="*"/>
+                </Grid.ColumnDefinitions>
+
+                <Button Grid.Column="0"
+                        Content="🧹 Limpiar Log" 
                         Background="#95A5A6"
                         Style="{StaticResource QuickButton}"
                         Command="{Binding ClearLogCommand}"/>
 
-                <Button Content="⏹️ Cancelar Proceso" 
-                        Background="#E74C3C"
-                        Style="{StaticResource QuickButton}"
+                <Button Grid.Column="1"
+                        Content="{Binding CancelButtonText}" 
+                        Style="{StaticResource CancelButton}"
                         Command="{Binding CancelOperationCommand}"/>
 
-                <Button Content="📊 Estado Actual" 
+                <Button Grid.Column="2"
+                        Content="📊 Estado Actual" 
                         Background="#3498DB"
                         Style="{StaticResource QuickButton}"
                         Command="{Binding ShowStatusCommand}"/>
-            </UniformGrid>
+            </Grid>
+
+            <!-- Información adicional cuando hay operación en progreso -->
+            <TextBlock Text="💡 Tip: Puedes cancelar la operación actual en cualquier momento"
+                       FontSize="10"
+                       FontStyle="Italic"
+                       Foreground="#7F8C8D"
+                       HorizontalAlignment="Center"
+                       Margin="0,8,0,0"
+                       Visibility="{Binding IsOperationInProgress, Converter={StaticResource BooleanToVisibilityConverter}}"/>
         </StackPanel>
     </Border>
 </UserControl>

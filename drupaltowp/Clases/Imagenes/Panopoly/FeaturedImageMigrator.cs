@@ -14,7 +14,7 @@ using WordPressPCL;
 
 namespace drupaltowp.Clases.Imagenes.Panopoly;
 
-internal class FeaturedImageMigrator(LoggerViewModel _logger, List<MigratedPostWithImage> PostList, MappingService _mappingService, WordPressClient _wpClient)
+internal class FeaturedImageMigrator(LoggerViewModel _logger, List<MigratedPostWithImage> PostList, MappingService _mappingService, WordPressClient _wpClient, CancellationToken cancellationToken)
 {
 
     public async Task FeaturedImageProcessor()
@@ -49,7 +49,7 @@ internal class FeaturedImageMigrator(LoggerViewModel _logger, List<MigratedPostW
             _logger.LogInfo($"📸 Imagen destacada migrada y asignada: {post.FeaturedImage.Filename} (ID: {wpMediaId.Value})");
 
             count++;
-
+            cancellationToken.ThrowIfCancelledEvery(count, 50);
             if (count % 100 == 0)
             {
                 var percentage = (count * 100.0) / total;

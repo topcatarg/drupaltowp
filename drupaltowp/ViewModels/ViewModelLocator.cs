@@ -16,10 +16,27 @@ namespace drupaltowp.ViewModels
         public VerificationPhaseViewModel VerificationPhase =>
             new VerificationPhaseViewModel(_coordinatorService.VerificationBusiness);
 
+        public PanopolyPhaseViewModel PanopolyPhase =>
+            new PanopolyPhaseViewModel(_coordinatorService.PanopolyMigrationBusiness);
+
+        public OpinionViewModel OpinionPhase =>
+            new OpinionViewModel(_coordinatorService.OpinionMigrationBusiness);
         public QuickControlsViewModel QuickControls =>
-            new QuickControlsViewModel(_loggerViewModel, _coordinatorService.VerificationBusiness.ShowSystemStatusAsync);
+            new QuickControlsViewModel(
+                _loggerViewModel,
+                _coordinatorService.VerificationBusiness.ShowSystemStatusAsync,
+                _coordinatorService.CancellationService);
 
         public LogPanelViewModel LogPanel =>
             new LogPanelViewModel(_loggerViewModel);
+
+        /// <summary>
+        /// Libera recursos
+        /// </summary>
+        public void Dispose()
+        {
+            QuickControls?.Dispose();
+            _coordinatorService?.Dispose();
+        }
     }
 }

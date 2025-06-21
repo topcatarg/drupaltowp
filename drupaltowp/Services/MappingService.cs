@@ -1,13 +1,15 @@
-﻿using drupaltowp.Configuracion;
+﻿using Dapper;
+using drupaltowp.Configuracion;
 using drupaltowp.Models;
 using drupaltowp.ViewModels;
 using MySql.Data.MySqlClient;
-using Dapper;
 using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
+using WordPressPCL.Client;
+using WordPressPCL.Models;
 
 namespace drupaltowp.Services;
 
@@ -27,6 +29,8 @@ internal class MappingService
     public Dictionary<int, MigratedPostInfo> BibliotecaMapping { get; private set; } = new();
     public Dictionary<int, MigratedPostInfo> PanopolyMapping { get; private set; } = new();
     public Dictionary<int, MigratedPostInfo> PostMapping { get; private set; } = new();
+
+    public Dictionary<int, MigratedPostInfo> OpinionMapping { get; private set; } = [];
 
     public MappingService(LoggerViewModel logger, string wpConnectionString = null)
     {
@@ -75,7 +79,7 @@ internal class MappingService
         await LoadCategoryMappingAsync(connection);
         await LoadTagMappingAsync(connection);
         await LoadRegionMappingAsync(connection);
-
+        await LoadMediaMappingAsync(connection);
         _logger.LogSuccess($"✅ Mapeos básicos cargados");
     }
 
@@ -103,6 +107,9 @@ internal class MappingService
                 break;
             case ContentType.Post:
                 await LoadPostMappingAsync(connection);
+                break;
+            case ContentType.Opinion:
+                await LoadOpinionMappingAsync(connection);
                 break;
         }
 
@@ -319,6 +326,35 @@ internal class MappingService
         }
     }
 
+    private async Task LoadOpinionMappingAsync(MySqlConnection connection)
+    {
+        try
+        {
+            var mappings = await connection.QueryAsync<MigratedPostInfo>(@"
+                    SELECT 
+                        drupal_post_id as DrupalPostId,
+                        wp_post_id as WpPostId,
+                        migrated_at as MigratedAt
+                    FROM post_mapping_opinion");
+
+            OpinionMapping = mappings.ToDictionary(
+                x => x.DrupalPostId,
+                x => new MigratedPostInfo
+                {
+                    DrupalPostId = x.DrupalPostId,
+                    WpPostId = x.WpPostId,
+                    MigratedAt = x.MigratedAt,
+                });
+
+            _logger.LogInfo($"   📚 Opinion: {OpinionMapping.Count:N0}");
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning($"Error cargando opinion: {ex.Message}");
+            BibliotecaMapping = [];
+        }
+    }
+
     #endregion
 
     #region MÉTODOS AUXILIARES
@@ -329,6 +365,11 @@ internal class MappingService
     public int GetWordPressUserId(int drupalUserId)
     {
         return UserMapping.TryGetValue(drupalUserId, out int wpUserId) ? wpUserId : 1;
+    }
+
+    public int GetWordPressMediaId(int drupalMediaId)
+    {
+        return MediaMapping.TryGetValue(drupalMediaId, out int wpMediaId) ? wpMediaId :1;
     }
 
     /// <summary>
@@ -372,6 +413,7 @@ internal class MappingService
             ContentType.Biblioteca => BibliotecaMapping.ContainsKey(drupalPostId),
             ContentType.PanopolyPage => PanopolyMapping.ContainsKey(drupalPostId),
             ContentType.Post => PostMapping.ContainsKey(drupalPostId),
+            ContentType.Opinion => OpinionMapping.ContainsKey(drupalPostId),
             _ => false
         };
     }
@@ -386,6 +428,7 @@ internal class MappingService
             ContentType.Biblioteca => BibliotecaMapping.TryGetValue(drupalPostId, out var bibInfo) ? bibInfo.WpPostId : null,
             ContentType.PanopolyPage => PanopolyMapping.TryGetValue(drupalPostId, out var panInfo) ? panInfo.WpPostId : null,
             ContentType.Post => PostMapping.TryGetValue(drupalPostId, out var postInfo) ? postInfo.WpPostId : null,
+            ContentType.Opinion => PostMapping.TryGetValue(drupalPostId, out var opiInfo) ? opiInfo.WpPostId: null,
             _ => null
         };
     }
@@ -441,6 +484,57 @@ internal class MappingService
     }
 
     #endregion
+
+    #region GUARDAR MAPEOS
+
+    public async Task SaveMediaMappingAsync(int drupalFid, int wpId, string filename)
+    {
+        using var connection = new MySqlConnection(_wpConnectionString);
+        await connection.OpenAsync();
+
+        await connection.ExecuteAsync(@"
+                INSERT INTO media_mapping (drupal_file_id, wp_media_id, drupal_filename, migrated_at) 
+                VALUES (@drupalFid, @wpId, @filename, @migratedAt)
+                ON DUPLICATE KEY UPDATE 
+                    wp_media_id = @wpId, 
+                    migrated_at = @migratedAt",
+            new { drupalFid, wpId, filename, migratedAt = DateTime.Now });
+        //Lo guardo en la lista tambien
+        MediaMapping[drupalFid] = wpId;
+    }
+
+    public async Task SaveOpinionPostMappingAsync(int drupalId, int wpId)
+    {
+        using var connection = new MySqlConnection(ConfiguracionGeneral.WPconnectionString);
+        await connection.OpenAsync();
+
+        MigratedPostInfo migratedPostInfo = new MigratedPostInfo()
+        {
+            DrupalPostId = drupalId,
+            WpPostId = wpId,
+            MigratedAt = DateTime.Now
+        };
+        await connection.ExecuteAsync(@"
+                INSERT INTO post_mapping_opinion (drupal_post_id, wp_post_id,  migrated_at) 
+                VALUES (@drupalId, @wpId, @migratedAt) 
+                ON DUPLICATE KEY UPDATE 
+                    wp_post_id = @wpId, 
+                    migrated_at = @migratedAt",
+            new
+            {
+                drupalId,
+                wpId,
+                migratedAt = DateTime.Now,
+            });
+        OpinionMapping[drupalId] = migratedPostInfo;
+    }
+
+    #endregion
+
+
+    #region Crear Cosas
+
+    #endregion
 }
 
 /// <summary>
@@ -450,6 +544,7 @@ public enum ContentType
 {
     Post,
     Biblioteca,
-    PanopolyPage
+    PanopolyPage,
+    Opinion
 }
 

@@ -13,7 +13,9 @@ using System.Numerics;
 using System.Text;
 using System.Threading.Tasks;
 using WordPressPCL;
+using WordPressPCL.Client;
 using WordPressPCL.Models;
+using WordPressPCL.Utility;
 using ZstdSharp.Unsafe;
 
 namespace drupaltowp.Clases.Imagenes.Panopoly;
@@ -26,6 +28,9 @@ internal class PanopolyImageMigrator
     private readonly WordPressClient _wpClient;
     private Dictionary<int, int> _mediaMapping = [];
     private bool MigrarGenerico = false;
+    private bool MigrarFeaturedImage = false;
+    private bool MigrarOtrasImagenes = false;
+    private bool MigrarFidImages = true;
     private MappingService _mappingService;
     public PanopolyImageMigrator(LoggerViewModel logger)
     {
@@ -35,12 +40,11 @@ internal class PanopolyImageMigrator
         _mappingService = new(_logger);
     }
 
-    public async Task<ImageMigrationSummary> SmartMigrateImagesAsync()
+    public async Task<ImageMigrationSummary> SmartMigrateImagesAsync(CancellationToken cancellationToken = default)
     {
         var summary = new ImageMigrationSummary { StartTime = DateTime.Now };
         _logger.LogProcess("INICIANDO MIGRACION INTELIGENTE DE IMAGENES PANOPOLY");
         _logger.LogInfo($"Solo post migrados y con fecha {ConfiguracionGeneral.FechaMinimaImagen.Year}");
-
         try
         {
             // 🚀 CARGAR MAPEOS EXISTENTES EN MEMORIA
@@ -72,16 +76,6 @@ internal class PanopolyImageMigrator
             _logger.LogInfo($"Imágenes: {totalImages:N0}");
             _logger.LogInfo($"Documentos: {totalDocuments:N0}");
             _logger.LogInfo($"Posts con imagen destacada: {postsWithFeaturedImage:N0}");
-            /*
-            var test = postsWithFiles.FirstOrDefault(x => x.Files.Count > 2);
-            var ConArchivos = postsWithFiles.Where(x => x.Files.Count > 2).ToList();
-            _logger.LogInfo($"ejemplo {test.WpPostId} {test.PostTitle}");
-            _logger.LogInfo($"con mas de un archivo: {ConArchivos.Count}");
-            foreach(var archivos in ConArchivos)
-            {
-                _logger.LogInfo($"titulo: {archivos.PostTitle} {archivos.DrupalPostId}");
-            }*/
-
             
             // 4. Asignar imagen genérica a posts antiguos (independiente de si tienen archivos)
             if (MigrarGenerico)
@@ -91,18 +85,40 @@ internal class PanopolyImageMigrator
                     await AssignGenericImageToPostsAsync(postsNeedingGeneric);
                 }
             }
-
+            // Migrar imagenes destacada
+            if (MigrarFeaturedImage)
+            {
+                var FeaturedImagePostsList = postsWithFiles.Where(p => p.FeaturedImage != null && !p.NeedsGenericImage).ToList();
+                FeaturedImageMigrator featuredImageMigrator = new(_logger, FeaturedImagePostsList, _mappingService, _wpClient, cancellationToken);
+                await featuredImageMigrator.FeaturedImageProcessor();
+            }
+            if (MigrarOtrasImagenes)
+            {
+                OtherImagesMigrator CI = new(_logger, postsWithFiles, _mappingService, _wpClient, cancellationToken);
+                await CI.ImageProcessorAsync();
+            }
+            if (MigrarFidImages)
+            {
+                FidImageMigrator fidImageMigrator = new(_logger, postsWithFiles, _mappingService, _wpClient, cancellationToken);
+                await fidImageMigrator.ImageProcessorAsync();
+            }
+            /*
             // 5. Migrar archivos de TODOS los posts que tengan archivos (antiguos y nuevos)
             if (postsWithFiles.Count > 0)
             {
-                var migrationResult = await ProcessOriginalFilesAsync(postsWithFiles);
+                var migrationResult = await ProcessOriginalFilesAsync(postsWithFiles, cancellationToken);
                 summary.FilesProcessed = migrationResult.FilesProcessed;
                 summary.FilesCopied = migrationResult.FilesCopied;
                 summary.FilesSkipped = migrationResult.FilesSkipped;
-            }
+            }*/
 
 
             return summary;
+        }
+        catch (OperationCanceledException)
+        {
+            _logger.LogMessage($"\n❌ Proceso CANCELADO");
+            throw;
         }
         catch (Exception ex)
         {
@@ -113,7 +129,7 @@ internal class PanopolyImageMigrator
     }
 
     private async Task<(int FilesProcessed, int FilesCopied, int FilesSkipped)> ProcessOriginalFilesAsync(
-    List<MigratedPostWithImage> posts)
+    List<MigratedPostWithImage> posts, CancellationToken cancellationToken)
     {
         _logger.LogProcess($"Procesando archivos de {posts.Count:N0} posts...");
 
@@ -126,8 +142,15 @@ internal class PanopolyImageMigrator
         var FeaturedImageList = posts.Where(x => !x.NeedsGenericImage && x.FeaturedImage != null).ToList();
         if (FeaturedImageList.Count > 0)
         {
-            FeaturedImageMigrator FI = new(_logger, FeaturedImageList, _mappingService, _wpClient);
+            FeaturedImageMigrator FI = new(_logger, FeaturedImageList, _mappingService, _wpClient, cancellationToken);
             await FI.FeaturedImageProcessor();
+        }
+        //Paso 2, Proceso las imagenes restantes
+        var ImageList = posts.Where(x => x.ContainsImages).ToList();
+        if (ImageList.Count > 0)
+        {
+            OtherImagesMigrator CI = new(_logger, ImageList, _mappingService, _wpClient, cancellationToken);
+            await CI.ImageProcessorAsync();
         }
         /*
         foreach (var post in posts)
@@ -297,12 +320,24 @@ internal class PanopolyImageMigrator
         }
         return postList;
     }
-    
+
+    #region Check Content Images
+
+    public async Task CheckImageOnContent ()
+    {
+
+    }
+    #endregion
     #region Generic Image
     private async Task EnsureGenericImageExistsAsync()
     {
         _logger.LogProcess("Verificando imagen generica...");
-
+        if (ConfiguracionGeneral.IdImagenGenerica > -1)
+        {
+            _genericImageId = ConfiguracionGeneral.IdImagenGenerica;
+            _logger.LogSuccess($"Imagen genérica predefinida: ID {_genericImageId}");
+            return;
+        }
         try
         {
             // Buscar si ya existe la imagen genérica por nombre

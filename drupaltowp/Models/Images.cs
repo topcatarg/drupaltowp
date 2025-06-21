@@ -24,6 +24,8 @@ public class MigratedPostWithImage
     public List<PostFile> ContentImages { get; set; } = new();
     public List<PostFile> Documents { get; set; } = new();
 
+    public bool ContainsImages => Files.Any(f => f.FileType == "image");
+
 }
 
 public class PostFile

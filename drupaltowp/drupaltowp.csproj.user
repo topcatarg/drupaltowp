@@ -13,6 +13,12 @@
     <Compile Update="Views\LogPanel.xaml.cs">
       <SubType>Code</SubType>
     </Compile>
+    <Compile Update="Views\OpinionPhaseCard.xaml.cs">
+      <SubType>Code</SubType>
+    </Compile>
+    <Compile Update="Views\PanopolyPhaseCard.xaml.cs">
+      <SubType>Code</SubType>
+    </Compile>
     <Compile Update="Views\PhaseCard.xaml.cs">
       <SubType>Code</SubType>
     </Compile>
