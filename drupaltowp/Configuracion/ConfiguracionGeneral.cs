@@ -21,6 +21,7 @@ namespace drupaltowp.Configuracion
         public static readonly string DrupalGenericImageFileName = "webp.net-resizeimage_1.png";
         public static readonly DateTime FechaMinimaImagen = new(2022, 1, 1);
         public static readonly string LogFilePath = @"C:\temp\drupaltowp_migration.log";
+        public static readonly int IdImagenGenerica = 13934; // ID de la imagen genérica en WordPress
 
     }
 }

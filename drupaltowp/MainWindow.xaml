@@ -36,6 +36,8 @@
                 <UniformGrid Columns="2">
                     <views:VerificationPhaseCard DataContext="{Binding ViewModelLocator.VerificationPhase}"/>
                     <views:PhaseCard/>
+                    <views:PanopolyPhaseCard DataContext="{Binding ViewModelLocator.PanopolyPhase}"/>
+                    <views:OpinionPhaseCard DataContext="{Binding ViewModelLocator.OpinionPhase}"/>
                 </UniformGrid>
 
                 <!-- Controles rápidos -->
