@@ -38,6 +38,7 @@
                     <views:PhaseCard/>
                     <views:PanopolyPhaseCard DataContext="{Binding ViewModelLocator.PanopolyPhase}"/>
                     <views:OpinionPhaseCard DataContext="{Binding ViewModelLocator.OpinionPhase}"/>
+                    <views:HubsPhaseCard DataContext="{Binding ViewModelLocator.HubsPhase}"/>
                 </UniformGrid>
 
                 <!-- Controles rápidos -->

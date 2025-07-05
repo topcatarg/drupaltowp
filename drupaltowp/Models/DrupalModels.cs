@@ -110,4 +110,5 @@ namespace drupaltowp.Models
         public string contenido { get; set; }
         public string bajada { get; set; }
     }
+
 }
