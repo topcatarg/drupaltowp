@@ -6,6 +6,7 @@ using System.Net.Http;
 using System.Threading.Tasks;
 using System.Windows.Controls;
 using Dapper;
+using drupaltowp.Models;
 using MySql.Data.MySqlClient;
 using WordPressPCL;
 
@@ -214,14 +215,5 @@ namespace drupaltowp
         }
     }
 
-    public class DrupalImage
-    {
-        public int Fid { get; set; }
-        public int Uid { get; set; }
-        public string Filename { get; set; }
-        public string Uri { get; set; }
-        public string Filemime { get; set; }
-        public long Filesize { get; set; }
-        public int Timestamp { get; set; }
-    }
+
 }

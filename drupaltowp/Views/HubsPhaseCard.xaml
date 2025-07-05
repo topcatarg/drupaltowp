@@ -1,0 +1,140 @@
+﻿<UserControl x:Class="drupaltowp.Views.HubsPhaseCard"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006" 
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008" 
+             xmlns:viewmodels="clr-namespace:drupaltowp.ViewModels" 
+             mc:Ignorable="d">
+
+    <UserControl.Resources>
+        <Style x:Key="HubsButton" TargetType="Button">
+            <Setter Property="Height" Value="40"/>
+            <Setter Property="Margin" Value="0,5"/>
+            <Setter Property="FontSize" Value="12"/>
+            <Setter Property="FontWeight" Value="SemiBold"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="Foreground" Value="White"/>
+            <Setter Property="Background" Value="#3498DB"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border Background="{TemplateBinding Background}" 
+                                CornerRadius="6"
+                                Padding="10,8">
+                            <ContentPresenter HorizontalAlignment="Center" 
+                                            VerticalAlignment="Center"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter Property="Opacity" Value="0.8"/>
+                            </Trigger>
+                            <Trigger Property="IsPressed" Value="True">
+                                <Setter Property="RenderTransform">
+                                    <Setter.Value>
+                                        <ScaleTransform ScaleX="0.98" ScaleY="0.98"/>
+                                    </Setter.Value>
+                                </Setter>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <Style x:Key="ImageButton" TargetType="Button" BasedOn="{StaticResource HubsButton}">
+            <Setter Property="Background" Value="#E67E22"/>
+        </Style>
+
+        <Style x:Key="StatusButton" TargetType="Button" BasedOn="{StaticResource HubsButton}">
+            <Setter Property="Background" Value="#27AE60"/>
+        </Style>
+
+        <Style x:Key="AnalysisButton" TargetType="Button" BasedOn="{StaticResource HubsButton}">
+            <Setter Property="Background" Value="#9B59B6"/>
+        </Style>
+    </UserControl.Resources>
+
+    <Border Background="White" 
+            CornerRadius="8" 
+            Margin="10" 
+            Padding="15">
+        <Border.Effect>
+            <DropShadowEffect ShadowDepth="2" BlurRadius="8" Opacity="0.2"/>
+        </Border.Effect>
+
+        <StackPanel>
+            <TextBlock Text="{Binding PhaseTitle}" 
+                       FontSize="16" 
+                       FontWeight="Bold" 
+                       Foreground="{Binding PhaseColor}"
+                       HorizontalAlignment="Center"
+                       Margin="0,0,0,15"/>
+
+            <!-- Sección de Análisis -->
+            <TextBlock Text="🔍 ANÁLISIS DE HUBS" 
+                       FontSize="12" 
+                       FontWeight="Bold" 
+                       Foreground="#34495E"
+                       Margin="0,0,0,5"/>
+
+            <Button Content="🔍 Analizar Estructura Hubs" 
+                    Style="{StaticResource AnalysisButton}"
+                    Command="{Binding AnalyzeHubsCommand}"/>
+
+            <!-- Separador -->
+            <Border Height="1" Background="#ECF0F1" Margin="0,10"/>
+
+            <!-- Sección de Migración -->
+            <TextBlock Text="🌐 MIGRACIÓN DE HUBS" 
+                       FontSize="12" 
+                       FontWeight="Bold" 
+                       Foreground="#34495E"
+                       Margin="0,0,0,5"/>
+
+            <Button Content="🌐 Migrar Publicaciones" 
+                    Style="{StaticResource HubsButton}"
+                    Command="{Binding MigrateHubsPublicationsCommand}"/>
+
+            <!-- Separador -->
+            <Border Height="1" Background="#ECF0F1" Margin="0,10"/>
+
+            <!-- Sección de Imágenes -->
+            <TextBlock Text="🖼️ MIGRACIÓN DE IMÁGENES" 
+                       FontSize="12" 
+                       FontWeight="Bold" 
+                       Foreground="#34495E"
+                       Margin="0,0,0,5"/>
+
+            <Button Content="🖼️ Migrar Imágenes Hubs" 
+                    Style="{StaticResource ImageButton}"
+                    Command="{Binding MigrateHubsImagesCommand}"/>
+
+            <Button Content="🔗 Procesar Imágenes en Contenido" 
+                    Style="{StaticResource ImageButton}"
+                    Command="{Binding ProcessHubsContentImagesCommand}"/>
+
+            <!-- Separador -->
+            <Border Height="1" Background="#ECF0F1" Margin="0,10"/>
+
+            <!-- Sección de Estado -->
+            <TextBlock Text="📊 ESTADO Y VALIDACIÓN" 
+                       FontSize="12" 
+                       FontWeight="Bold" 
+                       Foreground="#34495E"
+                       Margin="0,0,0,5"/>
+
+            <Button Content="📊 Estado Migración Hubs" 
+                    Style="{StaticResource StatusButton}"
+                    Command="{Binding ShowHubsStatusCommand}"/>
+
+            <Button Content="✅ Validar Migración Hubs" 
+                    Style="{StaticResource StatusButton}"
+                    Command="{Binding ValidateHubsMigrationCommand}"/>
+
+            <Button Content="RollBack Migración"
+                    Style="{StaticResource StatusButton}"
+                    Command="{Binding RollBackMigrationCommand}" />
+        </StackPanel>
+    </Border>
+</UserControl>

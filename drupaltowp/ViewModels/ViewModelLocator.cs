@@ -21,6 +21,9 @@ namespace drupaltowp.ViewModels
 
         public OpinionViewModel OpinionPhase =>
             new OpinionViewModel(_coordinatorService.OpinionMigrationBusiness);
+
+        public HubsPhaseViewModel HubsPhase =>
+            new HubsPhaseViewModel(_coordinatorService.HubsMigrationBusiness);
         public QuickControlsViewModel QuickControls =>
             new QuickControlsViewModel(
                 _loggerViewModel,

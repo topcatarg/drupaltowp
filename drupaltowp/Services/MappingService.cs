@@ -1,13 +1,16 @@
 ﻿using Dapper;
 using drupaltowp.Configuracion;
+using drupaltowp.Helpers;
 using drupaltowp.Models;
 using drupaltowp.ViewModels;
 using MySql.Data.MySqlClient;
 using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
+using WordPressPCL;
 using WordPressPCL.Client;
 using WordPressPCL.Models;
 
@@ -29,9 +32,8 @@ internal class MappingService
     public Dictionary<int, MigratedPostInfo> BibliotecaMapping { get; private set; } = new();
     public Dictionary<int, MigratedPostInfo> PanopolyMapping { get; private set; } = new();
     public Dictionary<int, MigratedPostInfo> PostMapping { get; private set; } = new();
-
     public Dictionary<int, MigratedPostInfo> OpinionMapping { get; private set; } = [];
-
+    public Dictionary<int, MigratedPostInfo> HubsMapping { get; private set; } = [];
     public MappingService(LoggerViewModel logger, string wpConnectionString = null)
     {
         _logger = logger;
@@ -110,6 +112,9 @@ internal class MappingService
                 break;
             case ContentType.Opinion:
                 await LoadOpinionMappingAsync(connection);
+                break;
+            case ContentType.Hubs:
+                await LoadHubsMappingAsync(connection);
                 break;
         }
 
@@ -351,7 +356,37 @@ internal class MappingService
         catch (Exception ex)
         {
             _logger.LogWarning($"Error cargando opinion: {ex.Message}");
-            BibliotecaMapping = [];
+            OpinionMapping = [];
+        }
+    }
+
+    private async Task LoadHubsMappingAsync(MySqlConnection connection)
+    {
+        try
+        {
+            var mappings = await connection.QueryAsync<MigratedPostInfo>(@"
+                    SELECT 
+                        drupal_post_id as DrupalPostId,
+                        wp_post_id as WpPostId,
+                        migrated_at as MigratedAt
+                    FROM post_mapping_Hubs");
+
+            
+            HubsMapping = mappings.ToDictionary(
+                x => x.DrupalPostId,
+                x => new MigratedPostInfo
+                {
+                    DrupalPostId = x.DrupalPostId,
+                    WpPostId = x.WpPostId,
+                    MigratedAt = x.MigratedAt,
+                });
+
+            _logger.LogInfo($"   📚 Hubs: {HubsMapping.Count:N0}");
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning($"Error cargando hubs: {ex.Message}");
+            HubsMapping = [];
         }
     }
 
@@ -414,6 +449,7 @@ internal class MappingService
             ContentType.PanopolyPage => PanopolyMapping.ContainsKey(drupalPostId),
             ContentType.Post => PostMapping.ContainsKey(drupalPostId),
             ContentType.Opinion => OpinionMapping.ContainsKey(drupalPostId),
+            ContentType.Hubs => HubsMapping.ContainsKey(drupalPostId),
             _ => false
         };
     }
@@ -428,7 +464,8 @@ internal class MappingService
             ContentType.Biblioteca => BibliotecaMapping.TryGetValue(drupalPostId, out var bibInfo) ? bibInfo.WpPostId : null,
             ContentType.PanopolyPage => PanopolyMapping.TryGetValue(drupalPostId, out var panInfo) ? panInfo.WpPostId : null,
             ContentType.Post => PostMapping.TryGetValue(drupalPostId, out var postInfo) ? postInfo.WpPostId : null,
-            ContentType.Opinion => PostMapping.TryGetValue(drupalPostId, out var opiInfo) ? opiInfo.WpPostId: null,
+            ContentType.Opinion => OpinionMapping.TryGetValue(drupalPostId, out var opiInfo) ? opiInfo.WpPostId: null,
+            ContentType.Hubs => HubsMapping.TryGetValue(drupalPostId, out var hubsInfo) ? hubsInfo.WpPostId : null,
             _ => null
         };
     }
@@ -529,11 +566,119 @@ internal class MappingService
         OpinionMapping[drupalId] = migratedPostInfo;
     }
 
+    public async Task SaveHubsPostMappingAsync(int drupalId, int wpId)
+    {
+        using var connection = new MySqlConnection(ConfiguracionGeneral.WPconnectionString);
+        await connection.OpenAsync();
+
+        MigratedPostInfo migratedPostInfo = new MigratedPostInfo()
+        {
+            DrupalPostId = drupalId,
+            WpPostId = wpId,
+            MigratedAt = DateTime.Now
+        };
+        await connection.ExecuteAsync(@"
+                INSERT INTO post_mapping_hubs (drupal_post_id, wp_post_id,  migrated_at) 
+                VALUES (@drupalId, @wpId, @migratedAt) 
+                ON DUPLICATE KEY UPDATE 
+                    wp_post_id = @wpId, 
+                    migrated_at = @migratedAt",
+            new
+            {
+                drupalId,
+                wpId,
+                migratedAt = DateTime.Now,
+            });
+        HubsMapping[drupalId] = migratedPostInfo;
+    }
+
+    private async Task SaveCategoryMappingAsync(int drupalId, int wordpressId, string drupalName, string vocabulary)
+    {
+        const string insertQuery = @"
+            INSERT INTO category_mapping 
+            (drupal_category_id, wp_category_id, drupal_name, vocabulary, migrated_at) 
+            VALUES (@DrupalId, @WordPressId, @DrupalName, @Vocabulary, @MigratedAt)
+            ON DUPLICATE KEY UPDATE 
+                wp_category_id = VALUES(wp_category_id),
+                drupal_name = VALUES(drupal_name),
+                migrated_at = CURRENT_TIMESTAMP";
+
+        using var connection = new MySqlConnection(ConfiguracionGeneral.WPconnectionString);
+        await connection.ExecuteAsync(insertQuery, new
+        {
+            DrupalId = drupalId,
+            WordPressId = wordpressId,
+            DrupalName = drupalName,
+            Vocabulary = vocabulary,
+            MigratedAt = DateTime.Now
+        });
+        CategoryMapping[drupalId] = wordpressId;
+    }
     #endregion
 
 
-    #region Crear Cosas
+    #region CREACION DE CONTENIDO
 
+    /// <summary>
+    /// Migra una categoria que no existe a wordpress
+    /// </summary>
+    /// <param name="CategoryName">Nombre de la categoria</param>
+    /// <param name="DrupalId">Id en drupal</param>
+    /// <param name="_wpClient">Cliente wordpress activo</param>
+    /// <returns>El id de la categoria creada</returns>
+    public async Task<int> MigrateSingleCategory(string CategoryName, int DrupalId, WordPressClient _wpClient)
+    {
+
+        _logger.LogInfo($"Se va a crear la categoria {CategoryName}");
+        // Crear nueva categoría
+        var wpCategory = new Category
+        {
+            Name = CategoryName,
+            Description = string.Empty,
+            Slug = SlugHelpers.GenerateSlug(CategoryName),
+        };
+
+        var createdCategory = await _wpClient.Categories.CreateAsync(wpCategory);
+
+        // Guardar mapeo en BD
+        await SaveCategoryMappingAsync(DrupalId, createdCategory.Id, CategoryName, "");
+        _logger.LogInfo($"Se agrego la {CategoryName} con el id {createdCategory.Id}");
+        return createdCategory.Id;
+    }
+
+    /// <summary>
+    /// Migra un archivo a wordpress
+    /// </summary>
+    /// <param name="drupalFile">Modelo de archivo de drupal</param>
+    /// <param name="_wpClient">Cliente wordpress activo</param>
+    /// <returns>el id del archivo migrado</returns>
+    public async Task<int> MigrateSingleFileAsync(DrupalImage drupalFile, WordPressClient _wpClient)
+    {
+        try
+        {
+            var drupalPath = drupalFile.Uri.Replace("public://", "");
+            var sourcePath = Path.Combine(ConfiguracionGeneral.DrupalFileRoute, drupalPath);
+
+            if (!File.Exists(sourcePath))
+            {
+                _logger.LogWarning($"Archivo no encontrado: {sourcePath}");
+                return 0;
+            }
+
+            // Usar la API de WordPress para subir el archivo
+            using var fileStream = new FileStream(sourcePath, FileMode.Open, FileAccess.Read);
+            var mediaItem = await _wpClient.Media.CreateAsync(fileStream, drupalFile.Filename);
+
+            //Lo agrego a los mapeos
+            await SaveMediaMappingAsync(drupalFile.Fid, mediaItem.Id, drupalFile.Filename);
+            return mediaItem.Id;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError($"Error migrando archivo {drupalFile.Filename}: {ex.Message}");
+            return 0;
+        }
+    }
     #endregion
 }
 
@@ -545,6 +690,7 @@ public enum ContentType
     Post,
     Biblioteca,
     PanopolyPage,
-    Opinion
+    Opinion,
+    Hubs
 }
 

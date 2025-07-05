@@ -9,7 +9,7 @@ namespace drupaltowp.Services
         public MigrationBusiness MigrationBusiness { get; }
         public PanopolyMigrationBusiness PanopolyMigrationBusiness { get; }
         public CancellationService CancellationService { get; }
-
+        public HubsMigrationBusiness HubsMigrationBusiness { get; }
         public OpinionMigrationBusiness OpinionMigrationBusiness { get; }
         public MigrationCoordinatorService(LoggerViewModel logger)
         {
@@ -21,6 +21,7 @@ namespace drupaltowp.Services
             MigrationBusiness = new MigrationBusiness(logger);
             PanopolyMigrationBusiness = new PanopolyMigrationBusiness(logger, CancellationService);
             OpinionMigrationBusiness = new OpinionMigrationBusiness(logger, CancellationService);
+            HubsMigrationBusiness = new HubsMigrationBusiness(logger, CancellationService);
         }
 
         /// <summary>

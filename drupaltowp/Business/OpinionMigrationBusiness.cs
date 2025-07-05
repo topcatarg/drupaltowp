@@ -34,10 +34,11 @@ namespace drupaltowp.Business
                 {
                     _logger.LogProcess("📄 Iniciando migración de páginas Opinion...");
 
-                    var migrator = new OpinionPostMigrator(_logger, _wpClient);
-
-                    // Configurar cancelación en el migrator
-                    migrator.Cancelar = false;
+                    var migrator = new OpinionPostMigrator(_logger, _wpClient)
+                    {
+                        // Configurar cancelación en el migrator
+                        Cancelar = false
+                    };
 
                     // Monitorear cancelación en un task separado
                     var monitorTask = Task.Run(async () =>
@@ -71,10 +72,11 @@ namespace drupaltowp.Business
                 {
                     _logger.LogProcess("📄 Iniciando el arreglo de imagenes de Opinion...");
 
-                    var migrator = new OpinionPostImageFixer(_logger, _wpClient);
-
-                    // Configurar cancelación en el migrator
-                    migrator.Cancelar = false;
+                    var migrator = new OpinionPostImageFixer(_logger, _wpClient)
+                    {
+                        // Configurar cancelación en el migrator
+                        Cancelar = false
+                    };
 
                     // Monitorear cancelación en un task separado
                     var monitorTask = Task.Run(async () =>
