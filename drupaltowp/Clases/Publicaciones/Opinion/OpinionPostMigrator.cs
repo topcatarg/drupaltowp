@@ -4,6 +4,7 @@ using drupaltowp.Models;
 using drupaltowp.Services;
 using drupaltowp.ViewModels;
 using MySql.Data.MySqlClient;
+using Mysqlx.Prepare;
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
@@ -24,7 +25,7 @@ internal class OpinionPostMigrator
 
     private int IdCategoriaOpinion = 1;
     public bool Cancelar { get; set; } = false;
-
+    private int IdCategoriaTemporal = 0; // ID de la categoría temporal que se creará para evitar "Uncategorized"
     public OpinionPostMigrator(LoggerViewModel logger, WordPressClient wpClient )
     {
         _logger = logger;
@@ -33,31 +34,37 @@ internal class OpinionPostMigrator
     }
 
     public async Task MigratePosts()
-    {
-        //Cargo los mapeos
+    {// Cargar los mapeos
         await _mappingService.LoadMappingsForContentType(ContentType.Opinion);
-        _logger.LogInfo("Se cargaron los mapeos");
-        //Creo la categoria Opinion
-        IdCategoriaOpinion = await GetOrCreateOpinionCategoryAsync();
-        //Traigo los posts:
+        _logger.LogInfo("✅ Mapeos cargados");
+
+        // Traer los posts de Drupal
         var opinionPosts = await GetOpinionPostsAsync();
         int processed = 0;
         int total = opinionPosts.Count;
+
         foreach (var post in opinionPosts)
         {
             try
             {
+                if (Cancelar)
+                {
+                    _logger.LogWarning("⚠️ Migración cancelada");
+                    break;
+                }
+
                 if (_mappingService.IsPostMigrated(post.Nid, ContentType.Opinion))
                 {
-                    _logger.LogMessage($"Post ya migrado {post.Title}");
+                    _logger.LogMessage($"⏭️ Post ya migrado: {post.Title}");
                     continue;
                 }
+
                 var wpPostId = await MigrateOpinionPostAsync(post);
                 if (wpPostId.HasValue)
                 {
                     processed++;
                     _logger.LogMessage($"✅ Migrado: [{post.Nid}] {post.Title}");
-                    // Log progreso cada 5 páginas
+
                     if (processed % 10 == 0)
                     {
                         var percentage = (processed * 100.0) / total;
@@ -70,140 +77,316 @@ internal class OpinionPostMigrator
                 _logger.LogMessage($"❌ Error migrando {post.Title}: {ex.Message}");
             }
         }
+
+        _logger.LogSuccess($"✅ Migración completada: {processed} posts migrados");
+    
     }
 
     private async Task<int?> MigrateOpinionPostAsync(OpinionPost opinionPost)
     {
-        // Preparar el contenido formateado para MH Magazine
-        var formattedContent = PrepareOpinionContentForMHMagazine(opinionPost);
+       // Preparar contenido limpio(solo el texto de Drupal)
+            var cleanContent = opinionPost.Content ?? "";
 
         // Obtener autor de WordPress
         var authorId = _mappingService.GetWordPressUserId(opinionPost.Uid);
 
-        // Crear post en WordPress
+        // 1. CREAR POST COMO TIPO 'POST' USANDO WORDPRESS API
         var wpPost = new Post
         {
             Title = new Title(opinionPost.Title),
-            Content = new Content(formattedContent),
+            Content = new Content(cleanContent),
             Excerpt = new Excerpt(opinionPost.FraseOpinion ?? opinionPost.Bajada ?? ""),
             Author = authorId,
             Status = opinionPost.Status == 1 ? Status.Publish : Status.Draft,
             Date = DateTimeOffset.FromUnixTimeSeconds(opinionPost.Created).DateTime
+            // NO asignamos Type aquí, dejamos que sea 'post' por defecto
         };
 
-        // Asignar a la categoría "Opinión"
-        wpPost.Categories = new List<int> { IdCategoriaOpinion };
+        // Obtener categorías y tags estándar para la creación inicial
+        var standardCategories = await GetStandardCategoriesAsync(opinionPost);
+        var standardTags = await GetStandardTagsAsync(opinionPost);
 
-        // Asignar tags si existen
-        if (opinionPost.Tags?.Count > 0)
+        if (standardCategories.Count != 0)
         {
-            wpPost.Tags = _mappingService.GetWordPressTags(opinionPost.Tags);
+            wpPost.Categories = standardCategories;
         }
 
-        // Crear el post
+        if (standardTags.Any())
+        {
+            wpPost.Tags = standardTags;
+        }
+
+        // Crear el post usando WordPress API
         var createdPost = await _wpClient.Posts.CreateAsync(wpPost);
 
-        // Procesar foto del autor si existe
+        // 2. CONVERTIR A TIPO 'OPINION' MANUALMENTE
+        await ConvertPostToOpinionTypeAsync(createdPost.Id);
+
+        // 3. AGREGAR METADATOS ESPECÍFICOS DE OPINION
+        await AddOpinionMetadataAsync(createdPost.Id, opinionPost);
+
+        // 4. PROCESAR FOTO DEL AUTOR SI EXISTE
         if (opinionPost.AutorPictureFid.HasValue)
         {
             await ProcessAuthorPhotoAsync(createdPost.Id, opinionPost);
         }
 
-        // Agregar metadatos específicos para MH Magazine
-        await AddMHMagazineMetadataAsync(createdPost.Id, opinionPost);
 
-        // Guardar mapping
+
+        // 6. GUARDAR MAPPING
         await _mappingService.SaveOpinionPostMappingAsync(opinionPost.Nid, createdPost.Id);
 
         return createdPost.Id;
     }
 
-    private static string PrepareOpinionContentForMHMagazine(OpinionPost post)
+    /// <summary>
+    /// Agrega metadatos específicos de Opinion
+    /// </summary>
+    private async Task AddOpinionMetadataAsync(int postId, OpinionPost post)
     {
-        var content = new List<string>();
+        using var connection = new MySqlConnection(ConfiguracionGeneral.WPconnectionString);
+        await connection.OpenAsync();
 
-        // 2. INFORMACIÓN DEL AUTOR - Estructura completa con foto
-        if (!string.IsNullOrEmpty(post.NombreAutor))
-        {
-            var autorSection = new List<string>();
-
-            // HTML del autor con foto si existe
-            if (post.AutorPictureFid.HasValue && !string.IsNullOrEmpty(post.AutorPictureFilename))
+        var metadata = new List<(string key, string value)>
             {
-                // Si hay foto del autor, crear estructura completa
-                autorSection.Add($@"
-<div class=""mh-author-bio opinion-author"" style=""margin-bottom: 2em; padding: 20px; background: #f8f9fa; border-radius: 8px; border-left: 3px solid #3498db; display: flex; align-items: center; gap: 15px;"">
-    <div class=""author-avatar"" style=""flex-shrink: 0;"">
-        <img src=""[AUTHOR_PHOTO_URL]"" alt=""{post.NombreAutor}"" style=""width: 80px; height: 80px; border-radius: 50%; object-fit: cover; border: 3px solid #3498db;"">
-    </div>
-    <div class=""author-info"">
-        <h4 style=""margin: 0 0 5px 0; color: #2c3e50; font-size: 1.2em;"">{post.NombreAutor}</h4>");
+                // Metadatos específicos del custom post type
+                ("_mh_post_type", "opinion"),
+                ("_mh_post_layout", "default"),
+                ("_mh_featured_post", "0")
+            };
 
-                if (!string.IsNullOrEmpty(post.ResponsabilidadAutor))
-                {
-                    autorSection.Add($@"        <p style=""margin: 0; color: #7f8c8d; font-style: italic; font-size: 0.95em;"">{post.ResponsabilidadAutor}</p>");
-                }
-
-                autorSection.Add(@"    </div>
-</div>");
-            }
-            else
-            {
-                // Sin foto, versión simplificada
-                autorSection.Add($@"
-<div class=""mh-author-bio opinion-author"" style=""margin-bottom: 2em; padding: 15px; background: #f1f2f6; border-radius: 5px; border-left: 3px solid #3498db;"">
-    <h4 style=""margin: 0 0 5px 0; color: #2c3e50;"">{post.NombreAutor}</h4>");
-
-                if (!string.IsNullOrEmpty(post.ResponsabilidadAutor))
-                {
-                    autorSection.Add($@"    <p style=""margin: 0; color: #7f8c8d; font-style: italic;"">{post.ResponsabilidadAutor}</p>");
-                }
-
-                autorSection.Add("</div>");
-            }
-
-            content.AddRange(autorSection);
-        }
-
-        // 1. FRASE DE OPINIÓN (lo que está resaltado debajo del título) - MUY IMPORTANTE
+        // Frase de opinión
         if (!string.IsNullOrEmpty(post.FraseOpinion))
         {
-            content.Add($@"
-<div class=""mh-excerpt opinion-highlight"" style=""font-size: 1.3em; font-weight: 600; color: #2c3e50; margin-bottom: 2em; line-height: 1.4; border-left: 4px solid #e74c3c; padding-left: 20px; background: #f8f9fa; padding: 20px; border-radius: 5px; font-style: italic;"">
-    ""{post.FraseOpinion}""
-</div>");
+            metadata.Add(("_mh_opinion_quote", post.FraseOpinion));
+            metadata.Add(("_mh_has_highlight", "1"));
         }
 
-        
+        // Información del autor personalizado
+        if (!string.IsNullOrEmpty(post.NombreAutor))
+        {
+            metadata.Add(("_mh_custom_author_name", post.NombreAutor));
+            metadata.Add(("_mh_has_custom_author", "1"));
+        }
 
-        // 3. BAJADA si existe (como subtítulo adicional)
+        if (!string.IsNullOrEmpty(post.ResponsabilidadAutor))
+        {
+            metadata.Add(("_mh_author_title", post.ResponsabilidadAutor));
+        }
+
+        // Foto del autor
+        if (post.AutorPictureFid.HasValue)
+        {
+            var wpMediaId = _mappingService.GetWordPressMediaId(post.AutorPictureFid.Value);
+            if (wpMediaId > 0)
+            {
+                metadata.Add(("_mh_author_photo_fid", wpMediaId.ToString()));
+                metadata.Add(("_mh_has_author_photo", "1"));
+            }
+        }
+
+        // Bajada como subtítulo
         if (!string.IsNullOrEmpty(post.Bajada))
         {
-            content.Add($@"
-<div class=""mh-bajada"" style=""font-size: 1.1em; color: #555; margin-bottom: 1.5em; line-height: 1.6; padding: 15px; background: #ffffff; border: 1px solid #e0e0e0; border-radius: 5px;"">
-    {post.Bajada}
-</div>");
+            metadata.Add(("_mh_subtitle", post.Bajada));
         }
 
-        // 4. CONTENIDO PRINCIPAL - Con formato mejorado para opinión
-        var mainContent = post.Content ?? "";
-
-        if (!string.IsNullOrEmpty(mainContent))
+        // Insertar metadatos
+        foreach (var (key, value) in metadata)
         {
-            // Mejorar formato de párrafos para lectura de opinión
-            mainContent = mainContent.Replace("</p><p>", "</p>\n\n<p>");
-
-            content.Add($@"
-<div class=""opinion-content"" style=""font-size: 1.1em; line-height: 1.8; color: #2c3e50; text-align: justify;"">
-    {mainContent}
-</div>");
+            await connection.ExecuteAsync(@"
+                    INSERT INTO wp_postmeta (post_id, meta_key, meta_value) 
+                    VALUES (@postId, @metaKey, @metaValue)
+                    ON DUPLICATE KEY UPDATE meta_value = @metaValue",
+                new { postId, metaKey = key, metaValue = value });
         }
+    }
+    /// <summary>
+    /// Convierte un post de tipo 'post' a tipo 'opinion'
+    /// </summary>
+    private async Task ConvertPostToOpinionTypeAsync(int postId)
+    {
+        try
+        {
+            using var connection = new MySqlConnection(ConfiguracionGeneral.WPconnectionString);
+            await connection.OpenAsync();
 
-       
+            // Cambiar el post_type a 'opinion' y actualizar GUID en una sola query
+            var siteUrl = ConfiguracionGeneral.UrlsitioWP.TrimEnd('/');
+            var newGuid = $"{siteUrl}/?post_type=opinion&p={postId}";
 
-        return string.Join("\n", content);
+            await connection.ExecuteAsync(@"
+                    UPDATE wp_posts 
+                    SET post_type = 'opinion', 
+                        guid = @Guid 
+                    WHERE ID = @PostId",
+                new { Guid = newGuid, PostId = postId });
+
+            _logger.LogInfo($"✅ Post {postId} convertido a tipo 'opinion'");
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError($"❌ Error convirtiendo post {postId} a opinion: {ex.Message}");
+            throw;
+        }
     }
 
+    /// <summary>
+    /// Obtiene tags estándar para la creación inicial del post
+    /// </summary>
+    private async Task<List<int>> GetStandardTagsAsync(OpinionPost opinionPost)
+    {
+        var tags = new List<int>();
+
+        try
+        {
+            if (opinionPost.Tags?.Count > 0)
+            {
+                foreach (var drupalTagId in opinionPost.Tags)
+                {
+
+                    _mappingService.TagMapping.TryGetValue(drupalTagId,out int WpId);
+                    if (WpId > 0)
+                    {
+                        tags.Add(WpId);
+                        continue; // Si ya existe, no necesitamos buscar más
+                    }
+                    string tagName = await GetTaxonomyNameFromDrupalAsync(drupalTagId);
+                    int newTagId = await _mappingService.MigrateSingleTagAsync("op_"+tagName, drupalTagId, _wpClient, ContentType.Opinion);
+                    await ChangeTaxonomyType(newTagId, "tag_opinion");
+                    tags.Add(newTagId);
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning($"⚠️ Error obteniendo tags estándar: {ex.Message}");
+        }
+
+        return tags;
+    }
+
+    /// <summary>
+    /// Obtiene categorías estándar para la creación inicial del post
+    /// </summary>
+    private async Task<List<int>> GetStandardCategoriesAsync(OpinionPost opinionPost)
+    {
+        var categories = new List<int>();
+
+        try
+        {
+            // Si tiene categoría específica, buscar su equivalente en WordPress
+            if (opinionPost.CategoryId.HasValue)
+            {
+                _mappingService.CategoryMapping.TryGetValue(opinionPost.CategoryId.Value, out int wpCategoryId);
+                if (wpCategoryId > 0)
+                {
+                    categories.Add(wpCategoryId);
+                }
+                //Tengo que agregar la categoria que no existe.
+                else
+                {
+                    string categoryName = await GetTaxonomyNameFromDrupalAsync(opinionPost.CategoryId.Value);
+                    int newCategoryId= await _mappingService.MigrateSingleCategory("op_"+categoryName, opinionPost.CategoryId.Value, _wpClient, ContentType.Opinion);
+                    //La cambio a opinion
+                    await ChangeTaxonomyType(newCategoryId, "categoria_opinion");
+                    categories.Add(newCategoryId);
+                }
+            }
+            // Siempre agregar una categoría "temporal" que luego quitaremos
+            // Esto evita que WordPress asigne "Uncategorized"
+            await GetOrCreateTempCategoryAsync();
+            if (IdCategoriaTemporal > 0 && !categories.Contains(IdCategoriaTemporal))
+            {
+                categories.Add(IdCategoriaTemporal);
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning($"⚠️ Error obteniendo categorías estándar: {ex.Message}");
+        }
+
+        return categories;
+    }
+
+    private async Task ChangeTaxonomyType(int TermId, string TaxonomyType)
+    {
+        try
+        {
+            using var connection = new MySqlConnection(ConfiguracionGeneral.WPconnectionString);
+            await connection.OpenAsync();
+            // Actualizar el taxonomy_type del término
+            await connection.ExecuteAsync(@"
+                    UPDATE wp_term_taxonomy 
+                    SET taxonomy = @TaxonomyType
+                    WHERE term_id = @CategoryId",
+                new { TaxonomyType = TaxonomyType, CategoryId = TermId });
+            await connection.ExecuteAsync(@"
+                    UPDATE wp_terms 
+                    SET name = replace(name,'op_','')
+                    WHERE term_id = @CategoryId",
+                new { CategoryId = TermId });
+            _logger.LogInfo($"✅ Taxonomía del término {TermId} cambiada a '{TaxonomyType}'");
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError($"❌ Error cambiando taxonomía del término {TermId}: {ex.Message}");
+            throw;
+        }
+    }
+    private async Task<string> GetTaxonomyNameFromDrupalAsync(int id)
+    {
+        const string query = @"
+            SELECT 
+                t.name
+            FROM taxonomy_term_data t
+            WHERE tid = @id
+            ";
+
+        using var connection = new MySqlConnection(ConfiguracionGeneral.DrupalconnectionString);
+        await connection.OpenAsync();
+        string result = await connection.ExecuteScalarAsync<string>(query, new { id });
+        return result;
+    }
+
+    /// <summary>
+    /// Obtiene o crea una categoría temporal para evitar "Uncategorized"
+    /// </summary>
+    private async Task GetOrCreateTempCategoryAsync()
+    {
+        try
+        {
+            if (IdCategoriaTemporal > 0)
+            {
+                return; // Ya tenemos la categoría temporal
+            }
+            // Buscar si ya existe una categoría temporal
+            var categories = await _wpClient.Categories.GetAllAsync();
+            var tempCategory = categories.FirstOrDefault(c => c.Name == "Temporal-Migration");
+
+            if (tempCategory != null)
+            {
+                IdCategoriaTemporal = tempCategory.Id;
+                return;
+            }
+
+            // Crear categoría temporal
+            var newCategory = new Category
+            {
+                Name = "Temporal-Migration",
+                Slug = "temporal-migration",
+                Description = "Categoría temporal para migración - será removida automáticamente"
+            };
+
+            var createdCategory = await _wpClient.Categories.CreateAsync(newCategory);
+            IdCategoriaTemporal = createdCategory.Id;
+            return ;
+        }
+        catch
+        {
+            return ; // Fallback a "Uncategorized"
+        }
+    }
     private async Task ProcessAuthorPhotoAsync(int postId, OpinionPost post)
     {
         try
@@ -297,102 +480,8 @@ internal class OpinionPostMigrator
         }
     }
 
-    private async Task AddMHMagazineMetadataAsync(int postId, OpinionPost post)
-    {
-        using var connection = new MySqlConnection(ConfiguracionGeneral.WPconnectionString);
-        await connection.OpenAsync();
-
-        var metadata = new List<(string key, string value)>
-        {
-            // Metadatos específicos de MH Magazine Theme
-            ("_mh_post_layout", "default"), // Layout por defecto
-            ("_mh_featured_post", "0"), // No destacado por defecto
-            ("_mh_post_type", "opinion") // Marcar como post de opinión
-        };
-
-        // Frase de opinión como metadato especial
-        if (!string.IsNullOrEmpty(post.FraseOpinion))
-        {
-            metadata.Add(("_mh_opinion_quote", post.FraseOpinion));
-            metadata.Add(("_mh_has_highlight", "1"));
-        }
-
-        // Información del autor personalizado
-        if (!string.IsNullOrEmpty(post.NombreAutor))
-        {
-            metadata.Add(("_mh_custom_author_name", post.NombreAutor));
-            metadata.Add(("_mh_has_custom_author", "1"));
-        }
-
-        if (!string.IsNullOrEmpty(post.ResponsabilidadAutor))
-        {
-            metadata.Add(("_mh_author_title", post.ResponsabilidadAutor));
-        }
-
-        // Foto del autor
-        if (post.AutorPictureFid.HasValue)
-        {
-            _mappingService.GetWordPressMediaId(post.AutorPictureFid.Value);
-
-            metadata.Add(("_mh_author_photo_fid", _mappingService.GetWordPressMediaId(post.AutorPictureFid.Value).ToString()));
-            metadata.Add(("_mh_has_author_photo", "1"));
-        }
-
-        // Bajada como subtítulo
-        if (!string.IsNullOrEmpty(post.Bajada))
-        {
-            metadata.Add(("_mh_subtitle", post.Bajada));
-        }
-
-        // Insertar metadatos
-        foreach (var (key, value) in metadata)
-        {
-            await connection.ExecuteAsync(@"
-                    INSERT INTO wp_postmeta (post_id, meta_key, meta_value) 
-                    VALUES (@postId, @metaKey, @metaValue)
-                    ON DUPLICATE KEY UPDATE meta_value = @metaValue",
-                new { postId, metaKey = key, metaValue = value });
-        }
-    }
           
         
-    #region Categoria
-    private async Task<int> GetOrCreateOpinionCategoryAsync()
-    {
-        try
-        {
-            // Buscar si ya existe la categoría "Opinión"
-            var categories = await _wpClient.Categories.GetAllAsync();
-            var opinionCategory = categories.FirstOrDefault(c =>
-                c.Name.Equals("Opinión", StringComparison.OrdinalIgnoreCase) ||
-                c.Slug.Equals("opinion", StringComparison.OrdinalIgnoreCase));
-
-            if (opinionCategory != null)
-            {
-                return opinionCategory.Id;
-            }
-
-            // Crear la categoría si no existe
-            var newCategory = new Category
-            {
-                Name = "Opinión",
-                Slug = "opinion",
-                Description = "Artículos de opinión y columnas editoriales"
-            };
-
-            var createdCategory = await _wpClient.Categories.CreateAsync(newCategory);
-            _logger.LogMessage($"✅ Categoría 'Opinión' creada con ID: {createdCategory.Id}");
-            
-            return createdCategory.Id;
-        }
-        catch (Exception ex)
-        {
-            _logger.LogMessage($"⚠️ Error creando categoría Opinión: {ex.Message}");
-            return 1; // Fallback a "Uncategorized"
-        }
-    }
-    #endregion
-
     #region Obtener Posts
     private async Task<List<OpinionPost>> GetOpinionPostsAsync()
     {

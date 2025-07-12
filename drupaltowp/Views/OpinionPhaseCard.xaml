@@ -9,6 +9,7 @@
              mc:Ignorable="d" 
              d:DesignHeight="450" d:DesignWidth="800">
     <UserControl.Resources>
+        <!-- Estilo base para todos los botones -->
         <Style x:Key="MigrationButton" TargetType="Button">
             <Setter Property="Height" Value="40"/>
             <Setter Property="Margin" Value="0,5"/>
@@ -44,16 +45,19 @@
             </Setter>
         </Style>
 
+        <!-- Estilo específico para botón de limpieza -->
+        <Style x:Key="CleanupButton" TargetType="Button" BasedOn="{StaticResource MigrationButton}">
+            <Setter Property="Background" Value="#E74C3C"/>
+        </Style>
+
+        <!-- Estilo específico para botón de imágenes -->
         <Style x:Key="ImageButton" TargetType="Button" BasedOn="{StaticResource MigrationButton}">
             <Setter Property="Background" Value="#8E44AD"/>
         </Style>
 
-        <Style x:Key="StatusButton" TargetType="Button" BasedOn="{StaticResource MigrationButton}">
+        <!-- Estilo específico para botón de corrección -->
+        <Style x:Key="CorrectionButton" TargetType="Button" BasedOn="{StaticResource MigrationButton}">
             <Setter Property="Background" Value="#27AE60"/>
-        </Style>
-
-        <Style x:Key="ArchiveButton" TargetType="Button" BasedOn="{StaticResource MigrationButton}">
-            <Setter Property="Background" Value="Aqua" />
         </Style>
     </UserControl.Resources>
 
@@ -66,6 +70,7 @@
         </Border.Effect>
 
         <StackPanel>
+            <!-- Título de la fase -->
             <TextBlock Text="{Binding PhaseTitle}" 
                        FontSize="16" 
                        FontWeight="Bold" 
@@ -73,9 +78,6 @@
                        HorizontalAlignment="Center"
                        Margin="0,0,0,15"/>
 
-            
-
-            
             <!-- Sección de Migración -->
             <TextBlock Text="📄 MIGRACIÓN DE PÁGINAS" 
                        FontSize="12" 
@@ -90,6 +92,20 @@
             <!-- Separador -->
             <Border Height="1" Background="#ECF0F1" Margin="0,10"/>
 
+            <!-- Sección de Limpieza -->
+            <TextBlock Text="🧹 LIMPIEZA DE DATOS" 
+                       FontSize="12" 
+                       FontWeight="Bold" 
+                       Foreground="#34495E"
+                       Margin="0,0,0,5"/>
+
+            <Button Content="🧹 Limpiar Publicaciones Migradas" 
+                    Style="{StaticResource CleanupButton}"
+                    Command="{Binding LimpiarPublicacionesCommand}"/>
+
+            <!-- Separador -->
+            <Border Height="1" Background="#ECF0F1" Margin="0,10"/>
+
             <!-- Sección de Imágenes -->
             <TextBlock Text="🖼️ MIGRACIÓN DE IMÁGENES" 
                        FontSize="12" 
@@ -97,37 +113,24 @@
                        Foreground="#34495E"
                        Margin="0,0,0,5"/>
 
-            <Button Content="🖼️ Arreglar Imagenes " 
+            <Button Content="🖼️ Arreglar Imagenes" 
                     Style="{StaticResource ImageButton}"
                     Command="{Binding ArreglarImagenesCommand}"/>
-            <!-- Sección de Imágenes -->
-            <TextBlock Text="🖼️ MIGRACIÓN DE ARCHIVOS" 
-            FontSize="12" 
-            FontWeight="Bold" 
-            Foreground="Aqua"
-            Margin="0,0,0,5"/>
-
-            <Button Content="🖼️ Migrar Archivos " 
-         Style="{StaticResource ArchiveButton}"
-         Command="{Binding MigrateArchiveCommand}"/>
 
             <!-- Separador -->
             <Border Height="1" Background="#ECF0F1" Margin="0,10"/>
 
-            <!-- Sección de Estado -->
-            <TextBlock Text="📊 ESTADO Y VALIDACIÓN" 
+            <!-- Sección de Corrección -->
+            <TextBlock Text="⚙️ CORRECCIÓN DE CONTENIDO" 
                        FontSize="12" 
                        FontWeight="Bold" 
                        Foreground="#34495E"
                        Margin="0,0,0,5"/>
 
-            <Button Content="📊 Estado Migración Panopoly" 
-                    Style="{StaticResource StatusButton}"
-                    Command="{Binding ShowPanopolyStatusCommand}"/>
+            <Button Content="⚙️ Corregir Tipo de Publicación" 
+                    Style="{StaticResource CorrectionButton}"
+                    Command="{Binding CorregirTipoPublicacionCommand}"/>
 
-            <Button Content="✅ Validar Migración" 
-                    Style="{StaticResource StatusButton}"
-                    Command="{Binding ValidatePanopolyMigrationCommand}"/>
         </StackPanel>
     </Border>
 </UserControl>
