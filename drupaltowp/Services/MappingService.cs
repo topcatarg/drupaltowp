@@ -45,7 +45,7 @@ internal class MappingService
     /// <summary>
     /// Carga todos los mapeos disponibles
     /// </summary>
-    public async Task LoadAllMappingsAsync()
+    public async Task LoadAllMappingsAsync(ContentType? contentType)
     {
         _logger.LogProcess("📋 Cargando todos los mapeos disponibles...");
 
@@ -54,8 +54,8 @@ internal class MappingService
 
         // Cargar mapeos básicos
         await LoadUserMappingAsync(connection);
-        await LoadCategoryMappingAsync(connection);
-        await LoadTagMappingAsync(connection);
+        await LoadCategoryMappingAsync(connection, contentType);
+        await LoadTagMappingAsync(connection, contentType);
         await LoadRegionMappingAsync(connection);
         await LoadMediaMappingAsync(connection);
 
@@ -70,7 +70,7 @@ internal class MappingService
     /// <summary>
     /// Carga solo los mapeos básicos (usuarios, categorías, tags, regiones)
     /// </summary>
-    public async Task LoadBasicMappingsAsync()
+    public async Task LoadBasicMappingsAsync(ContentType? contentType)
     {
         _logger.LogProcess("📋 Cargando mapeos básicos...");
 
@@ -78,8 +78,8 @@ internal class MappingService
         await connection.OpenAsync();
 
         await LoadUserMappingAsync(connection);
-        await LoadCategoryMappingAsync(connection);
-        await LoadTagMappingAsync(connection);
+        await LoadCategoryMappingAsync(connection, contentType);
+        await LoadTagMappingAsync(connection, contentType);
         await LoadRegionMappingAsync(connection);
         await LoadMediaMappingAsync(connection);
         _logger.LogSuccess($"✅ Mapeos básicos cargados");
@@ -96,7 +96,7 @@ internal class MappingService
         await connection.OpenAsync();
 
         // Siempre cargar básicos
-        await LoadBasicMappingsAsync();
+        await LoadBasicMappingsAsync(contentType);
 
         // Cargar específico del tipo
         switch (contentType)
@@ -142,13 +142,18 @@ internal class MappingService
         }
     }
 
-    private async Task LoadCategoryMappingAsync(MySqlConnection connection)
+    private async Task LoadCategoryMappingAsync(MySqlConnection connection, ContentType? contentType)
     {
         try
         {
+            string Query = "SELECT drupal_category_id, wp_category_id FROM category_mapping WHERE drupal_category_id IS NOT NULL";
+            if (contentType.HasValue)
+             {
+                Query += $" AND vocabulary = '{contentType.Value}'";
+            }
             // Cargar todas las categorías (tanto panopoly_categories como bibliteca_categorias)
             var mappings = await connection.QueryAsync<dynamic>(
-                "SELECT drupal_category_id, wp_category_id FROM category_mapping WHERE drupal_category_id IS NOT NULL");
+                Query);
 
             CategoryMapping = mappings.ToDictionary(x => (int)x.drupal_category_id, x => (int)x.wp_category_id);
             _logger.LogInfo($"   📂 Categorías: {CategoryMapping.Count:N0}");
@@ -156,16 +161,22 @@ internal class MappingService
         catch (Exception ex)
         {
             _logger.LogWarning($"Error cargando categorías: {ex.Message}");
-            CategoryMapping = new Dictionary<int, int>();
+            CategoryMapping = [];
         }
+        
     }
 
-    private async Task LoadTagMappingAsync(MySqlConnection connection)
+    private async Task LoadTagMappingAsync(MySqlConnection connection, ContentType? contentType)
     {
         try
         {
+            string query = "SELECT drupal_tag_id, wp_tag_id FROM tag_mapping WHERE drupal_tag_id IS NOT NULL";
+            if (contentType.HasValue)
+            {        
+                query += $" AND type = '{contentType.Value}'";
+            }
             var mappings = await connection.QueryAsync<dynamic>(
-                "SELECT drupal_tag_id, wp_tag_id FROM tag_mapping WHERE drupal_tag_id IS NOT NULL");
+                query);
 
             TagMapping = mappings.ToDictionary(x => (int)x.drupal_tag_id, x => (int)x.wp_tag_id);
             _logger.LogInfo($"   🏷️ Tags: {TagMapping.Count:N0}");
@@ -614,6 +625,29 @@ internal class MappingService
         });
         CategoryMapping[drupalId] = wordpressId;
     }
+
+    private async Task SaveTagMappingAsync(int drupalId, int wordpressId, string drupalName, ContentType contentType)
+    {
+        const string insertQuery = @"
+            INSERT INTO tag_mapping 
+            (drupal_tag_id, wp_tag_id, drupal_name, type, migrated_at) 
+            VALUES (@DrupalId, @WordPressId, @DrupalName, @Type, @MigratedAt)
+            ON DUPLICATE KEY UPDATE 
+                wp_tag_id = VALUES(wp_tag_id),
+                drupal_name = VALUES(drupal_name),
+                type = VALUES(type),
+                migrated_at = CURRENT_TIMESTAMP";
+        using var connection = new MySqlConnection(ConfiguracionGeneral.WPconnectionString);
+        await connection.ExecuteAsync(insertQuery, new
+        {
+            DrupalId = drupalId,
+            WordPressId = wordpressId,
+            DrupalName = drupalName,
+            Type = contentType.ToString(),
+            MigratedAt = DateTime.Now
+        });
+        TagMapping[drupalId] = wordpressId;
+    }
     #endregion
 
 
@@ -626,7 +660,7 @@ internal class MappingService
     /// <param name="DrupalId">Id en drupal</param>
     /// <param name="_wpClient">Cliente wordpress activo</param>
     /// <returns>El id de la categoria creada</returns>
-    public async Task<int> MigrateSingleCategory(string CategoryName, int DrupalId, WordPressClient _wpClient)
+    public async Task<int> MigrateSingleCategory(string CategoryName, int DrupalId, WordPressClient _wpClient, ContentType contentType)
     {
 
         _logger.LogInfo($"Se va a crear la categoria {CategoryName}");
@@ -641,11 +675,27 @@ internal class MappingService
         var createdCategory = await _wpClient.Categories.CreateAsync(wpCategory);
 
         // Guardar mapeo en BD
-        await SaveCategoryMappingAsync(DrupalId, createdCategory.Id, CategoryName, "");
+        await SaveCategoryMappingAsync(DrupalId, createdCategory.Id, CategoryName, contentType.ToString());
         _logger.LogInfo($"Se agrego la {CategoryName} con el id {createdCategory.Id}");
         return createdCategory.Id;
     }
 
+    public async Task<int> MigrateSingleTagAsync(string tagName, int drupalId, WordPressClient _wpClient, ContentType contentType)
+    {
+        _logger.LogInfo($"Se va a crear el tag {tagName}");
+        // Crear nuevo tag
+        var wpTag = new Tag
+        {
+            Name = tagName,
+            Slug = SlugHelpers.GenerateSlug(tagName),
+            Description = string.Empty,
+        };
+        var createdTag = await _wpClient.Tags.CreateAsync(wpTag);
+        // Guardar mapeo en BD
+        await SaveTagMappingAsync(drupalId, createdTag.Id, tagName,contentType);
+        _logger.LogInfo($"Se agrego el tag {tagName} con el id {createdTag.Id}");
+        return createdTag.Id;
+    }
     /// <summary>
     /// Migra un archivo a wordpress
     /// </summary>

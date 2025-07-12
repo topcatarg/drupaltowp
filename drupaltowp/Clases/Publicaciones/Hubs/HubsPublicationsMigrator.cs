@@ -338,7 +338,7 @@ public class HubsPublicationsMigrator
         else
         {
             //No existe la categoria, la agregamos.
-            wpCategoryId = await _mappingService.MigrateSingleCategory(hub.NombreCategoria, hub.Categoria.Value, _wpClient);
+            wpCategoryId = await _mappingService.MigrateSingleCategory(hub.NombreCategoria, hub.Categoria.Value, _wpClient, ContentType.Hubs);
             categories.Add(wpCategoryId );
         }
 

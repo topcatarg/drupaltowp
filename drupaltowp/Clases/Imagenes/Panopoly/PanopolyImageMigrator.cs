@@ -48,7 +48,7 @@ internal class PanopolyImageMigrator
         try
         {
             // 🚀 CARGAR MAPEOS EXISTENTES EN MEMORIA
-            await _mappingService.LoadBasicMappingsAsync();
+            await _mappingService.LoadBasicMappingsAsync(ContentType.PanopolyPage);
             //Verifico la imagen generica
             await EnsureGenericImageExistsAsync();
 

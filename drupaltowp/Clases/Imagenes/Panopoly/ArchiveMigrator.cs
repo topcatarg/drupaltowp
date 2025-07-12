@@ -38,7 +38,7 @@ internal class ArchiveMigrator
         try
         {
             // 🚀 CARGAR MAPEOS EXISTENTES EN MEMORIA
-            await _mappingService.LoadBasicMappingsAsync();
+            await _mappingService.LoadBasicMappingsAsync(ContentType.Biblioteca);
             // 2. Obtener posts migrados con sus archivos
             var migratedPosts = await GetMigratedPostsWithAllFilesAsync();
             _logger.LogInfo($"Posts migrados encontrados: {migratedPosts.Count:N0}");

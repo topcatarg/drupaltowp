@@ -60,3 +60,12 @@ public class OpinionPost
     public int? RegionId { get; set; }          // field_noticia_region_site_tid
     public List<int> Tags { get; set; } = new(); // field_tags_tid (múltiples)
 }
+
+public class OpinionMappedPost
+{
+    public int DrupalPostId { get; set; }
+    public int WpPostId { get; set; }
+    public string PostTitle { get; set; }
+    public string PostType { get; set; }
+    public string PostStatus { get; set; }
+}

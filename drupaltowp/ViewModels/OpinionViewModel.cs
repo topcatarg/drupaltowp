@@ -1,20 +1,13 @@
 ﻿using drupaltowp.Business;
-using System;
-using System.Collections.Generic;
 using System.ComponentModel;
-using System.Linq;
 using System.Runtime.CompilerServices;
-using System.Text;
-using System.Threading.Tasks;
 using System.Windows.Input;
 
 namespace drupaltowp.ViewModels
 {
     public class OpinionViewModel : INotifyPropertyChanged
     {
-
         private readonly OpinionMigrationBusiness _opinionBusiness;
-
 
         public OpinionViewModel(OpinionMigrationBusiness opinionMigrationBusiness)
         {
@@ -22,7 +15,9 @@ namespace drupaltowp.ViewModels
 
             // Inicializar commands
             MigrateOpinionPagesCommand = new RelayCommand(async () => await _opinionBusiness.MigrateOpinionPagesAsync());
+            LimpiarPublicacionesCommand = new RelayCommand(async () => await _opinionBusiness.LimpiarPublicacionesMigradasAsync());
             ArreglarImagenesCommand = new RelayCommand(async () => await _opinionBusiness.ArreglarImagenesAsync());
+            CorregirTipoPublicacionCommand = new RelayCommand(async () => await _opinionBusiness.CorregirTipoPublicacionAsync());
         }
 
         #region Properties
@@ -32,10 +27,9 @@ namespace drupaltowp.ViewModels
 
         #region Commands
         public ICommand MigrateOpinionPagesCommand { get; }
-
+        public ICommand LimpiarPublicacionesCommand { get; }
         public ICommand ArreglarImagenesCommand { get; }
-
-
+        public ICommand CorregirTipoPublicacionCommand { get; }
         #endregion
 
         #region INotifyPropertyChanged
