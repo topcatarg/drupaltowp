@@ -106,19 +106,18 @@ internal class OpinionPostMigrator
         var standardCategories = await GetStandardCategoriesAsync(opinionPost);
         var standardTags = await GetStandardTagsAsync(opinionPost);
 
-        if (standardCategories.Count != 0)
-        {
-            wpPost.Categories = standardCategories;
-        }
-
-        if (standardTags.Any())
-        {
-            wpPost.Tags = standardTags;
-        }
-
         // Crear el post usando WordPress API
         var createdPost = await _wpClient.Posts.CreateAsync(wpPost);
 
+        //Agregar manualmente las categorías y tags
+        if (standardCategories.Count > 0)
+        {
+         await   AgregarTaxonomiasAsync(standardCategories, createdPost.Id);
+        }
+        if (standardTags.Count > 0)
+        {
+         await   AgregarTaxonomiasAsync(standardTags, createdPost.Id);
+        }
         // 2. CONVERTIR A TIPO 'OPINION' MANUALMENTE
         await ConvertPostToOpinionTypeAsync(createdPost.Id);
 
@@ -131,14 +130,45 @@ internal class OpinionPostMigrator
             await ProcessAuthorPhotoAsync(createdPost.Id, opinionPost);
         }
 
-
-
         // 6. GUARDAR MAPPING
         await _mappingService.SaveOpinionPostMappingAsync(opinionPost.Nid, createdPost.Id);
 
         return createdPost.Id;
     }
 
+    /// <summary>
+    /// Asigna una categoría específica de Opinion al post
+    /// </summary>
+    private async Task AgregarTaxonomiasAsync(List<int> Taxonomias, int PostId)
+    {
+        foreach (int Id in Taxonomias)
+        {
+            try
+            {
+                using MySqlConnection connection = new(ConfiguracionGeneral.WPconnectionString);
+                await connection.OpenAsync();
+                // Asignar al post
+                var inserted = await connection.ExecuteAsync(@"
+            INSERT IGNORE INTO wp_term_relationships (object_id, term_taxonomy_id)
+            VALUES (@PostId, @TaxonomyId)",
+                    new { PostId, TaxonomyId = Id });
+
+                if (inserted > 0)
+                {
+                    await connection.ExecuteAsync(@"
+            UPDATE wp_term_taxonomy 
+            SET count = count + 1 
+            WHERE term_taxonomy_id = @TaxonomyId",
+                new { TaxonomyId = Id });
+                    // Actualizar contador
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError($"❌ Error asignando taxonomia {Id}: {ex.Message}");
+            }
+        }
+    }
     /// <summary>
     /// Agrega metadatos específicos de Opinion
     /// </summary>
@@ -252,8 +282,7 @@ internal class OpinionPostMigrator
                         continue; // Si ya existe, no necesitamos buscar más
                     }
                     string tagName = await GetTaxonomyNameFromDrupalAsync(drupalTagId);
-                    int newTagId = await _mappingService.MigrateSingleTagAsync("op_"+tagName, drupalTagId, _wpClient, ContentType.Opinion);
-                    await ChangeTaxonomyType(newTagId, "tag_opinion");
+                    int newTagId = await _mappingService.MigrateSingleTaxonomyDBDirectAsync(tagName, drupalTagId, "tag_opinion","op-");
                     tags.Add(newTagId);
                 }
             }
@@ -287,9 +316,7 @@ internal class OpinionPostMigrator
                 else
                 {
                     string categoryName = await GetTaxonomyNameFromDrupalAsync(opinionPost.CategoryId.Value);
-                    int newCategoryId= await _mappingService.MigrateSingleCategory("op_"+categoryName, opinionPost.CategoryId.Value, _wpClient, ContentType.Opinion);
-                    //La cambio a opinion
-                    await ChangeTaxonomyType(newCategoryId, "categoria_opinion");
+                    int newCategoryId= await _mappingService.MigrateSingleTaxonomyDBDirectAsync(categoryName, opinionPost.CategoryId.Value,"categoria_opinion","op-");
                     categories.Add(newCategoryId);
                 }
             }

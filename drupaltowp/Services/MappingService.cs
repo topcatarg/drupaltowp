@@ -626,7 +626,7 @@ internal class MappingService
         CategoryMapping[drupalId] = wordpressId;
     }
 
-    private async Task SaveTagMappingAsync(int drupalId, int wordpressId, string drupalName, ContentType contentType)
+    private async Task SaveTagMappingAsync(int drupalId, int wordpressId, string drupalName, string contentType)
     {
         const string insertQuery = @"
             INSERT INTO tag_mapping 
@@ -643,7 +643,7 @@ internal class MappingService
             DrupalId = drupalId,
             WordPressId = wordpressId,
             DrupalName = drupalName,
-            Type = contentType.ToString(),
+            Type = contentType,
             MigratedAt = DateTime.Now
         });
         TagMapping[drupalId] = wordpressId;
@@ -660,7 +660,7 @@ internal class MappingService
     /// <param name="DrupalId">Id en drupal</param>
     /// <param name="_wpClient">Cliente wordpress activo</param>
     /// <returns>El id de la categoria creada</returns>
-    public async Task<int> MigrateSingleCategory(string CategoryName, int DrupalId, WordPressClient _wpClient, ContentType contentType)
+    public async Task<int> MigrateSingleCategoryUsingAPIAsync(string CategoryName, int DrupalId, WordPressClient _wpClient, ContentType contentType)
     {
 
         _logger.LogInfo($"Se va a crear la categoria {CategoryName}");
@@ -680,7 +680,15 @@ internal class MappingService
         return createdCategory.Id;
     }
 
-    public async Task<int> MigrateSingleTagAsync(string tagName, int drupalId, WordPressClient _wpClient, ContentType contentType)
+    /// <summary>
+    /// Migra un tag que no existe a wordpress
+    /// </summary>
+    /// <param name="tagName">Nombre del tag</param>
+    /// <param name="drupalId">Id en drupal</param>
+    /// <param name="_wpClient">Cliente wordpress api</param>
+    /// <param name="contentType">tipo de contenido</param>
+    /// <returns></returns>
+    public async Task<int> MigrateSingleTagUsingAPIAsync(string tagName, int drupalId, WordPressClient _wpClient, ContentType contentType)
     {
         _logger.LogInfo($"Se va a crear el tag {tagName}");
         // Crear nuevo tag
@@ -692,9 +700,75 @@ internal class MappingService
         };
         var createdTag = await _wpClient.Tags.CreateAsync(wpTag);
         // Guardar mapeo en BD
-        await SaveTagMappingAsync(drupalId, createdTag.Id, tagName,contentType);
+        await SaveTagMappingAsync(drupalId, createdTag.Id, tagName,contentType.ToString());
         _logger.LogInfo($"Se agrego el tag {tagName} con el id {createdTag.Id}");
         return createdTag.Id;
+    }
+    /// <summary>
+    /// Migra un tag directamente a la base de datos de wordpress
+    /// </summary>
+    /// <param name="TaxonomyName">Nombre de la taxonomia</param>
+    /// <param name="drupalId">Id en drupal</param>
+    /// <param name="contentType">tipo de contenido</param>
+    /// <returns></returns>
+    public async Task<int> MigrateSingleTaxonomyDBDirectAsync(string TaxonomyName, int drupalId, string contentType, string prefijo = "")
+    {
+        string QueryCreate = @"
+            INSERT INTO wp_terms (name, slug, term_group) 
+            VALUES (@Name, @Slug, 0) 
+            ON DUPLICATE KEY UPDATE 
+                name = @Name, 
+                slug = @Slug";
+        string QueryNewId = @"
+            SELECT term_id FROM wp_terms WHERE slug = @Slug";
+        string QueryTermTaxonomy = @"
+            INSERT INTO wp_term_taxonomy (term_id, taxonomy, description, parent, count) 
+            VALUES (@term_id, @category, '', 0, 0) 
+            ON DUPLICATE KEY UPDATE 
+                taxonomy = @category, 
+                description = '', 
+                parent = 0, 
+                count = 0";
+        string QueryNewTerm_tax_id = @"
+             select term_taxonomy_id from wp_term_taxonomy where term_id = @id";
+        MySqlTransaction transaction = null;
+        _logger.LogInfo($"Se va a crear el tag {TaxonomyName}");
+        using var connection = new MySqlConnection(ConfiguracionGeneral.WPconnectionString);
+        try
+        {
+            string slug =prefijo + SlugHelpers.GenerateSlug(TaxonomyName);
+            await connection.OpenAsync();
+            transaction = await connection.BeginTransactionAsync();
+            //creo el tag con su slug
+            await connection.ExecuteAsync(QueryCreate, new
+            {
+                Name = TaxonomyName,
+                Slug = slug
+            }, transaction);
+            //obtengo el id del tag creado
+            var termId = await connection.QueryFirstOrDefaultAsync<int>(QueryNewId, new { Slug = slug }, transaction);
+            await connection.ExecuteAsync(QueryTermTaxonomy, new
+            {
+                term_id = termId,
+                Slug = slug,
+                category = contentType
+            }, transaction);
+            await transaction.CommitAsync();
+            //Aca obtener el term_taxonomy_id
+            var Term_tax_id = await connection.QueryFirstAsync<int>(QueryNewTerm_tax_id, new { id = termId }, transaction);
+            await SaveTagMappingAsync(drupalId, Term_tax_id, TaxonomyName, contentType);
+            _logger.LogInfo($"Se agrego la taxonomia {TaxonomyName} con el id {termId}");
+            return Term_tax_id;
+        }
+        catch (Exception ex)
+        {
+            if (transaction != null)
+            {
+                await transaction.RollbackAsync();
+            }
+            _logger.LogError($"Error al migrar la taxonomia {TaxonomyName}: {ex.Message}");
+            return 0;
+        }
     }
     /// <summary>
     /// Migra un archivo a wordpress
