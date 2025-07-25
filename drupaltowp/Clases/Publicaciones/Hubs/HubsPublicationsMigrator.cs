@@ -16,14 +16,16 @@ using WordPressPCL.Models;
 
 namespace drupaltowp.Clases.Publicaciones.Hubs;
 
+
 public class HubsPublicationsMigrator
 {
     private readonly LoggerViewModel _logger;
     private readonly WordPressClient _wpClient;
     private readonly MappingService _mappingService;
-    private int _hubsCategoryId = 12368;
+    // Ya no necesitamos la categoría Hubs fija
 
     public bool Cancelar = false;
+
     public HubsPublicationsMigrator(LoggerViewModel logger)
     {
         _logger = logger;
@@ -45,18 +47,15 @@ public class HubsPublicationsMigrator
             // 1. Cargar mapeos necesarios
             await LoadRequiredMappings();
 
-            // 2. Crear/obtener categoría Hubs
-            await EnsureHubsCategoryExists();
-
-            // 3. Obtener datos de hubs desde Drupal
+            // 2. Obtener datos de hubs desde Drupal (ya no necesitamos crear categoría Hubs)
             var hubsData = await GetHubsDataFromDrupal();
 
-            // 4. Agrupar datos por publicación
+            // 3. Agrupar datos por publicación
             var groupedHubs = GroupHubsByPublication(hubsData);
 
             _logger.LogInfo($"📊 Procesando {groupedHubs.Count} publicaciones de hubs...");
 
-            // 5. Migrar cada publicación
+            // 4. Migrar cada publicación
             await MigrateHubsPublications(groupedHubs);
 
             _logger.LogSuccess("✅ Migración de publicaciones de hubs completada");
@@ -68,92 +67,271 @@ public class HubsPublicationsMigrator
         }
     }
 
-    private async Task LoadRequiredMappings()
+    private async Task MigrateHubsPublications(Dictionary<int, HubPublicationData> groupedHubs)
     {
-        _logger.LogInfo("📋 Cargando mapeos necesarios...");
-        await _mappingService.LoadMappingsForContentType(ContentType.Hubs);
+        var migratedCount = 0;
+        var skippedCount = 0;
+        var totalCount = groupedHubs.Count;
+
+        foreach (var kvp in groupedHubs)
+        {
+            if (Cancelar) break;
+
+            try
+            {
+                var hub = kvp.Value;
+
+                // Verificar si ya está migrado
+                if (_mappingService.HubsMapping.ContainsKey(hub.Nid))
+                {
+                    _logger.LogInfo($"⏭️ Hub {hub.Nid} ya migrado, omitiendo...");
+                    skippedCount++;
+                    continue;
+                }
+
+                // Crear el post en WordPress
+                var wpPostId = await CreateWordPressPost(hub);
+
+                // Guardar mapping
+                await _mappingService.SaveHubsPostMappingAsync(hub.Nid, wpPostId);
+
+                migratedCount++;
+                var percentage = (double)(migratedCount + skippedCount) / totalCount * 100;
+                _logger.LogInfo($"✅ Hub migrado: {hub.Titulo} (ID: {hub.Nid} → {wpPostId}) " +
+                               $"- Progreso: {migratedCount + skippedCount:N0}/{totalCount:N0} ({percentage:F1}%)");
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError($"❌ Error migrando hub {kvp.Key}: {ex.Message}");
+                skippedCount++;
+                Cancelar = true;
+            }
+        }
+
+        _logger.LogSuccess($"🎉 Migración completada: {migratedCount} hubs migrados, {skippedCount} omitidos");
     }
 
-    private async Task EnsureHubsCategoryExists()
+    private async Task<int> CreateWordPressPost(HubPublicationData hub)
     {
-        try
+        // Crear la publicación directamente en la base de datos
+        var postId = await CreatePostInDatabase(hub);
+
+        // Agregar categorías y tags
+        await AssignCategoriesAndTags(postId, hub);
+
+        // Asignar imagen destacada
+        await AssignFeaturedImage(postId, hub);
+
+        return postId;
+    }
+    private async Task AssignFeaturedImage(int postId, HubPublicationData hub)
+    {
+        var featuredImageId = await HandleFeaturedImage(hub);
+
+        if (featuredImageId > 0)
         {
-            _logger.LogInfo("📂 Verificando categoría 'Hubs'...");
+            using var connection = new MySqlConnection(ConfiguracionGeneral.WPconnectionString);
+            await connection.OpenAsync();
 
-            if (_hubsCategoryId != 0)
-            {
-                _logger.LogInfo($"Categoria existente con id: {_hubsCategoryId}");
-                return;
-            }
-            // Buscar si ya existe la categoría
-            var categories = await _wpClient.Categories.GetAllAsync();
-            var hubsCategory = categories.FirstOrDefault(c =>
-                c.Name.Equals("Hubs", StringComparison.OrdinalIgnoreCase));
+            await connection.ExecuteAsync(HubQueries.InsertFeaturedImageMeta,
+                new { postId, imageId = featuredImageId });
+        }
+    }
 
-            if (hubsCategory != null)
+    private async Task<int> HandleFeaturedImage(HubPublicationData hub)
+    {
+        if (hub.ImagenesDestacadas.Count < 1 || !hub.ImagenesDestacadas[0].HasValue)
+            return 0;
+
+        if (_mappingService.MediaMapping.TryGetValue(hub.ImagenesDestacadas[0].Value, out int wpImageId))
+        {
+            // Ya está mapeada, retornar ID de WordPress
+            return wpImageId;
+        }
+
+        // Obtener la imagen de drupal
+        var drupalImage = await ImageHelpers.GetDrupalImageData(hub.ImagenesDestacadas[0].Value);
+
+        // Migrarla a WordPress
+        int wpId = await _mappingService.MigrateSingleFileAsync(drupalImage, _wpClient);
+        return wpId;
+    }
+    private async Task AssignCategoriesAndTags(int postId, HubPublicationData hub)
+    {
+        using var connection = new MySqlConnection(ConfiguracionGeneral.WPconnectionString);
+        await connection.OpenAsync();
+
+        // Asignar categorías
+        var categories = await GetWordPressCategories(hub);
+        foreach (var categoryId in categories)
+        {
+            await connection.ExecuteAsync(HubQueries.InsertTermRelationship,
+                new { postId, taxonomyId = categoryId });
+
+            // Actualizar contador de la categoría
+            await connection.ExecuteAsync(HubQueries.UpdateTaxonomyCount,
+                new { taxonomyId = categoryId });
+        }
+
+        // Asignar tags
+        var tags = await GetWordPressTags(hub);
+        foreach (var tagId in tags)
+        {
+            await connection.ExecuteAsync(HubQueries.InsertTermRelationship,
+                new { postId, taxonomyId = tagId });
+
+            // Actualizar contador del tag
+            await connection.ExecuteAsync(HubQueries.UpdateTaxonomyCount,
+                new { taxonomyId = tagId });
+        }
+    }
+
+    private async Task<List<int>> GetWordPressTags(HubPublicationData hub)
+    {
+        var wpTags = new List<int>();
+
+        foreach (var tagId in hub.Tags)
+        {
+            using var wpConnection = new MySqlConnection(ConfiguracionGeneral.WPconnectionString);
+            await wpConnection.OpenAsync();
+
+            if (_mappingService.TaxonomyMapping.TryGetValue(tagId, out int wpTagId))
             {
-                _hubsCategoryId = hubsCategory.Id;
-                _logger.LogInfo($"✅ Categoría 'Hubs' encontrada (ID: {_hubsCategoryId})");
+                wpTags.Add(wpTagId);
             }
             else
             {
-                // Crear la categoría
-                var newCategory = new Category
-                {
-                    Name = "Hubs",
-                    Description = "Publicaciones del tipo Hubs migradas desde Drupal",
-                    Slug = "hubs"
-                };
+                // Crear nuevo tag usando MappingService
+                
+                var tagName =await GetTaxonomyNameFromDrupalAsync(tagId);
 
-                var createdCategory = await _wpClient.Categories.CreateAsync(newCategory);
-                _hubsCategoryId = createdCategory.Id;
-                _logger.LogSuccess($"✅ Categoría 'Hubs' creada (ID: {_hubsCategoryId})");
+                // Usar el método existente del MappingService
+                int termTaxonomyId = await _mappingService.MigrateSingleTaxonomyDBDirectAsync(
+                    tagName,
+                    tagId,
+                    "tag_hub",
+                    "hub-tag-");
+
+                wpTags.Add(termTaxonomyId);
             }
         }
-        catch (Exception ex)
-        {
-            _logger.LogError($"❌ Error manejando categoría Hubs: {ex.Message}");
-            _hubsCategoryId = 1; // Categoría por defecto
-        }
+
+        return wpTags;
     }
 
-    private async Task<List<HubQueryResult>> GetHubsDataFromDrupal()
+    private async Task<string> GetTaxonomyNameFromDrupalAsync(int id)
     {
-        _logger.LogInfo("🔍 Obteniendo datos de hubs desde Drupal...");
+        const string query = @"
+            SELECT 
+                t.name
+            FROM taxonomy_term_data t
+            WHERE tid = @id
+            ";
 
         using var connection = new MySqlConnection(ConfiguracionGeneral.DrupalconnectionString);
         await connection.OpenAsync();
-
-        var query = @"
-                SELECT 
-                    n.nid,
-                    n.title as titulo,
-                    n.uid,
-                    n.created as creado,
-                    n.status,
-                    fdb.body_value as cuerpo,
-                    fdfb.field_bajada_value as bajada,
-                    fdfbii.field_basic_image_image_fid as imagen_destacada,
-                    fdfh.field_hub_tid as categoria,
-                    ttd.name as nombre_categoria,
-                    fdft.field_tags_tid as tags
-                FROM node n
-                LEFT JOIN field_data_body fdb ON fdb.entity_id = n.nid
-                LEFT JOIN field_data_field_bajada fdfb ON fdfb.entity_id = n.nid
-                LEFT JOIN field_data_field_basic_image_image fdfbii ON fdfbii.entity_id = n.nid
-                LEFT JOIN field_data_field_hub fdfh ON fdfh.entity_id = n.nid
-                LEFT JOIN taxonomy_term_data ttd ON ttd.tid = fdfh.field_hub_tid
-                LEFT JOIN field_data_field_tags fdft ON fdft.entity_id = n.nid
-                WHERE n.type = 'hubs'
-                AND fdb.body_value IS NOT NULL
-                AND n.status = 1
-                ORDER BY n.nid, fdft.field_tags_tid";
-
-        var hubsData = await connection.QueryAsync<HubQueryResult>(query);
-        _logger.LogInfo($"📊 Obtenidos {hubsData.Count()} registros de hubs");
-
-        return hubsData.ToList();
+        string result = await connection.ExecuteScalarAsync<string>(query, new { id });
+        return result;
     }
+    private async Task<List<int>> GetWordPressCategories(HubPublicationData hub)
+    {
+        var categories = new List<int>();
+
+        if (!hub.Categoria.HasValue)
+        {
+            return categories;
+        }
+
+        using var wpConnection = new MySqlConnection(ConfiguracionGeneral.WPconnectionString);
+        await wpConnection.OpenAsync();
+
+        // Verificar si ya existe el mapeo
+        if (_mappingService.TaxonomyMapping.TryGetValue(hub.Categoria.Value, out int wpCategoryId))
+        {
+                categories.Add(wpCategoryId);
+        }
+        else
+        {
+            // Usar el método existente del MappingService
+            int termTaxonomyId = await _mappingService.MigrateSingleTaxonomyDBDirectAsync(
+                hub.NombreCategoria,
+                hub.Categoria.Value,
+                "category_hub",
+                "hub-category-");
+
+            categories.Add(termTaxonomyId);
+        }
+
+        return categories;
+    }
+    private async Task<int> CreatePostInDatabase(HubPublicationData hub)
+    {
+        using var connection = new MySqlConnection(ConfiguracionGeneral.WPconnectionString);
+        await connection.OpenAsync();
+
+        var dateGmt = hub.Creado.ToUniversalTime();
+        var now = DateTime.Now;
+        var nowGmt = now.ToUniversalTime();
+        var slug = GenerateSlug(hub.Titulo);
+
+        var postId = await connection.QuerySingleAsync<int>($@"
+            {HubQueries.InsertWordPressPost};
+            {HubQueries.GetLastInsertId}",
+            new
+            {
+                author = _mappingService.UserMapping[hub.Uid],
+                date = hub.Creado.ToString("yyyy-MM-dd HH:mm:ss"),
+                date_gmt = dateGmt.ToString("yyyy-MM-dd HH:mm:ss"),
+                content = hub.Cuerpo ?? "",
+                title = hub.Titulo,
+                excerpt = hub.Bajada ?? "", // Bajada como excerpt
+                slug = slug,
+                modified = now.ToString("yyyy-MM-dd HH:mm:ss"),
+                modified_gmt = nowGmt.ToString("yyyy-MM-dd HH:mm:ss"),
+                guid = $"{ConfiguracionGeneral.UrlsitioWP}/?post_type=hub&p={{0}}"
+            });
+
+        // Actualizar el GUID con el ID real
+        await connection.ExecuteAsync(HubQueries.UpdatePostGuid,
+            new
+            {
+                guid = $"{ConfiguracionGeneral.UrlsitioWP}/?post_type=hub&p={postId}",
+                postId
+            });
+
+        // Agregar volanta como meta field si existe
+        if (!string.IsNullOrWhiteSpace(hub.Volanta))
+        {
+            await connection.ExecuteAsync(HubQueries.InsertPostMeta,
+                new { postId, metaKey = "_hub_volanta", metaValue = hub.Volanta });
+        }
+
+        return postId;
+    }
+
+    private string GenerateSlug(string title)
+    {
+        if (string.IsNullOrWhiteSpace(title))
+            return "hub-sin-titulo";
+
+        // Convertir a minúsculas y remover acentos
+        var slug = title.ToLowerInvariant()
+            .Replace("á", "a").Replace("é", "e").Replace("í", "i").Replace("ó", "o").Replace("ú", "u")
+            .Replace("ñ", "n").Replace("ü", "u");
+
+        // Remover caracteres especiales y espacios
+        slug = System.Text.RegularExpressions.Regex.Replace(slug, @"[^a-z0-9\s-]", "");
+        slug = System.Text.RegularExpressions.Regex.Replace(slug, @"\s+", "-");
+        slug = System.Text.RegularExpressions.Regex.Replace(slug, @"-+", "-");
+        slug = slug.Trim('-');
+
+        // Limitar longitud
+        if (slug.Length > 100)
+            slug = slug.Substring(0, 100).TrimEnd('-');
+
+        return string.IsNullOrWhiteSpace(slug) ? "hub-sin-titulo" : slug;
+    }
+
     private Dictionary<int, HubPublicationData> GroupHubsByPublication(List<HubQueryResult> hubsData)
     {
         _logger.LogInfo("📋 Agrupando datos por publicación...");
@@ -176,10 +354,11 @@ public class HubsPublicationsMigrator
                     Status = row.Status,
                     Cuerpo = row.Cuerpo,
                     Bajada = row.Bajada,
+                    Volanta = row.Volanta, // Agregar volanta
                     Categoria = row.Categoria,
                     NombreCategoria = row.Nombre_Categoria,
-                    ImagenesDestacadas = [],
-                    Tags = []
+                    ImagenesDestacadas = new List<int?>(),
+                    Tags = new List<int>()
                 };
             }
 
@@ -198,214 +377,25 @@ public class HubsPublicationsMigrator
             }
         }
 
-        _logger.LogInfo($"✅ Agrupados en {groupedHubs.Count} publicaciones únicas");
+        _logger.LogInfo($"📊 Agrupados en {groupedHubs.Count} publicaciones únicas");
         return groupedHubs;
     }
-
-    private async Task MigrateHubsPublications(Dictionary<int, HubPublicationData> groupedHubs)
+    private async Task<List<HubQueryResult>> GetHubsDataFromDrupal()
     {
-        int migratedCount = 0;
-        int skippedCount = 0;
-        int total = groupedHubs.Count;
-        foreach (var kvp in groupedHubs)
-        {
-            if (Cancelar)
-            {
-                _logger.LogWarning("⚠️ Migración cancelada por el usuario");
-                break;
-            }
+        _logger.LogInfo("📥 Obteniendo datos de hubs desde Drupal...");
 
-            try
-            {
-                var hub = kvp.Value;
+        using var connection = new MySqlConnection(ConfiguracionGeneral.DrupalconnectionString);
+        await connection.OpenAsync();
 
-                // Verificar si ya fue migrado
-                if (_mappingService.HubsMapping.ContainsKey(hub.Nid))
-                {
-                    skippedCount++;
-                    continue;
-                }
+        var hubsData = await connection.QueryAsync<HubQueryResult>(HubQueries.GetHubsFromDrupal);
+        _logger.LogInfo($"📊 Obtenidos {hubsData.Count()} registros de hubs");
 
-                // Crear contenido combinando bajada + cuerpo
-                var content = BuildPostContent(hub);
-
-                // Obtener categorías para WordPress
-                var wpCategories = await GetWordPressCategories(hub);
-
-                // Obtener tags para WordPress
-                var wpTags = await GetWordPressTags(hub);
-
-                // Migro Imagen Destacada
-                //Migro la imagen destacada
-                int MediaId = await HandleFeaturedImage(hub);
-
-                // Crear post en WordPress
-                var wpPost = new Post
-                {
-                    Title = new Title(hub.Titulo),
-                    Content = new Content(content),
-                    Excerpt = new Excerpt(hub.Bajada ?? ""),
-                    Status = Status.Publish,
-                    Date = DateTimeOffset.FromUnixTimeSeconds(hub.Creado).DateTime,
-                    Author = _mappingService.UserMapping.GetValueOrDefault(hub.Uid, 1),
-                    Categories = wpCategories,
-                    Tags = wpTags,
-                    FeaturedMedia= MediaId,
-                };
-
-                var createdPost = await _wpClient.Posts.CreateAsync(wpPost);
-
-                // Guardar en BD
-                await _mappingService.SaveHubsPostMappingAsync(hub.Nid, createdPost.Id);
-
-                // Manejar imágenes destacadas múltiples
-                await HandleMultipleFeaturedImages(hub, createdPost.Id);
-
-                migratedCount++;
-                _logger.LogInfo($"✅ Hub migrado: {hub.Titulo} (Drupal: {hub.Nid} → WP: {createdPost.Id})");
-
-                // Log progreso cada 5 páginas
-                if (migratedCount % 10 == 0)
-                {
-                    var percentage = (migratedCount * 100.0) / total;
-                    _logger.LogInfo($"📊 Progreso: {migratedCount:N0}/{total:N0} ({percentage:F1}%)");
-                }
-                // Pequeña pausa para no sobrecargar
-                //await Task.Delay(100, _cancellationService.CurrentToken);
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError($"❌ Error migrando hub {kvp.Key}: {ex.Message}");
-                skippedCount++;
-            }
-        }
-
-        _logger.LogSuccess($"🎉 Migración completada: {migratedCount} hubs migrados, {skippedCount} omitidos");
+        return hubsData.ToList();
     }
 
-    /// <summary>
-    /// Crea la imagen destacada
-    /// </summary>
-    /// <param name="hub"></param>
-    /// <returns></returns>
-    private async Task<int> HandleFeaturedImage(HubPublicationData hub)
+    private async Task LoadRequiredMappings()
     {
-        if (hub.ImagenesDestacadas.Count < 1)
-            return 0;
-        //Busco la imagen
-        //Obtenemos la imagen de drupal
-        var drupalImage = await ImageHelpers.GetDrupalImageData(hub.ImagenesDestacadas[0].Value);
-        //La migramos
-        int wpId = await _mappingService.MigrateSingleFileAsync(drupalImage, _wpClient);
-        return wpId;
+        _logger.LogInfo("📋 Cargando mapeos necesarios...");
+        await _mappingService.LoadMappingsForContentType(ContentType.Hubs);
     }
-
-    private string BuildPostContent(HubPublicationData hub)
-    {
-        var content = "";
-
-        // Agregar bajada al inicio si existe
-        if (!string.IsNullOrWhiteSpace(hub.Bajada))
-        {
-            content += $"<div class=\"hub-bajada\">{hub.Bajada}</div>\n\n";
-        }
-
-        // Agregar cuerpo principal
-        if (!string.IsNullOrWhiteSpace(hub.Cuerpo))
-        {
-            content += hub.Cuerpo;
-        }
-
-        return content;
-    }
-
-    private async Task<List<int>> GetWordPressCategories(HubPublicationData hub)
-    {
-        var categories = new List<int> { _hubsCategoryId }; // Siempre incluir categoría Hubs
-        
-        if (!hub.Categoria.HasValue)
-        {
-            return categories;
-        }
-        // Agregar categoría original si existe mapeo
-        if (_mappingService.CategoryMapping.TryGetValue(hub.Categoria.Value, out int wpCategoryId))
-        {
-            if (!categories.Contains(wpCategoryId))
-            {
-                categories.Add(wpCategoryId);
-            }
-        }
-        else
-        {
-            //No existe la categoria, la agregamos.
-            wpCategoryId = await _mappingService.MigrateSingleCategoryUsingAPIAsync(hub.NombreCategoria, hub.Categoria.Value, _wpClient, ContentType.Hubs);
-            categories.Add(wpCategoryId );
-        }
-
-        return categories;
-    }
-
-    private async Task<List<int>> GetWordPressTags(HubPublicationData hub)
-    {
-        var wpTags = new List<int>();
-
-        foreach (var tagId in hub.Tags)
-        {
-            if (_mappingService.TagMapping.ContainsKey(tagId))
-            {
-                wpTags.Add(_mappingService.TagMapping[tagId]);
-            }
-        }
-
-        return wpTags;
-    }
-
-    private async Task HandleMultipleFeaturedImages(HubPublicationData hub, int wpPostId)
-    {
-        if (hub.ImagenesDestacadas.Count <= 1)
-            return;
-
-        try
-        {
-            
-            // Las imágenes adicionales las agregamos al final del contenido
-
-            var additionalImages = hub.ImagenesDestacadas.Skip(1).Where(img => img.HasValue).ToList();
-
-            if (additionalImages.Count != 0)
-            {
-                _logger.LogInfo($"📸 Hub {hub.Nid} tiene {additionalImages.Count} imágenes adicionales que se agregarán al contenido");
-                string NuevoCuerpo = hub.Cuerpo;
-                foreach (var img in additionalImages)
-                {
-                    //Obtenemos la imagen de drupal
-                    var drupalImage = await ImageHelpers.GetDrupalImageData(img.Value);
-                    //La migramos
-                    int wpId = await _mappingService.MigrateSingleFileAsync(drupalImage,_wpClient);
-                    var wpMedia = await _wpClient.Media.GetByIDAsync(wpId);
-                    //La agregamos al contenido
-                    string Texto = ImageHelpers.GenerateWordPressImageHtml(wpMedia, drupalImage.Filename);
-                    NuevoCuerpo += Texto;
-                }
-                if (NuevoCuerpo != hub.Cuerpo)
-                {
-                    using MySqlConnection DrupalConnection = new MySqlConnection(ConfiguracionGeneral.DrupalconnectionString    );
-                    await DrupalConnection.OpenAsync();
-                    // Actualizar el contenido del post
-                    await DrupalConnection.ExecuteAsync(
-                        "UPDATE wp_posts SET post_content = @content WHERE ID = @postId",
-                        new { content = NuevoCuerpo, wpPostId });
-                    _logger.LogInfo("Se actualizo el cuerpo de la publicacion");
-                }
-
-
-                
-            }
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError($"❌ Error manejando imágenes múltiples para hub {hub.Nid}: {ex.Message}");
-        }
-    }
-
 }
