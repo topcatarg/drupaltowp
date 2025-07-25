@@ -1,4 +1,5 @@
-﻿using drupaltowp.Configuracion;
+﻿using Dapper;
+using drupaltowp.Configuracion;
 using drupaltowp.Services;
 using drupaltowp.ViewModels;
 using MySql.Data.MySqlClient;
@@ -8,7 +9,7 @@ using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 using WordPressPCL;
-using Dapper;
+using WordPressPCL.Models;
 
 namespace drupaltowp.Clases.Publicaciones.Hubs;
 
@@ -38,13 +39,21 @@ internal class HubsPublicationsRollback
         await wpConnection.OpenAsync();
         foreach (var post in _mappingService.HubsMapping)
         {
-            await _wpClient.Posts.DeleteAsync(post.Value.WpPostId);
+            //Borro en wp_post_meta
+            await wpConnection.ExecuteAsync(HubRollBackQuerys.DeletePostMeta, new { postId = post.Value.WpPostId });
+            //borro el post en wordpress
+            await wpConnection.ExecuteAsync(HubRollBackQuerys.DeletePost, new { postId = post.Value.WpPostId });
+            //Borro las relaciones de terminos
+            await wpConnection.ExecuteAsync(HubRollBackQuerys.DeleteTermRelationship, new { postId = post.Value.WpPostId });
+            //Borro el post en mapping
+            await wpConnection.ExecuteAsync(HubRollBackQuerys.DeleteMapping, new { id = post.Value.WpPostId });
             //Lo borro del mapeo
-            await wpConnection.ExecuteAsync(@"
-DELETE
-FROM post_mapping_hubs
-WHERE wp_post_id = @id", new {id = post.Value.WpPostId});
             _logger.LogMessage($"se borro el post con id: {post.Value.WpPostId}");
         }
+        //Borro las categorias de hub creadas. 
+        await wpConnection.ExecuteAsync(HubRollBackQuerys.DeleteCategoryTermTaxonomy);
+        await wpConnection.ExecuteAsync(HubRollBackQuerys.DeleteTagTermTaxonomy);
+        await wpConnection.ExecuteAsync(HubRollBackQuerys.DeleteTerm);
+        _logger.LogMessage($"se borraron todos los terminos");
     }
 }

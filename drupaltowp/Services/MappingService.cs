@@ -27,6 +27,7 @@ internal class MappingService
     public Dictionary<int, int> TagMapping { get; private set; } = new();
     public Dictionary<int, int> RegionMapping { get; private set; } = new();
     public Dictionary<int, int> MediaMapping { get; private set; } = new();
+    public Dictionary<int, int> TaxonomyMapping { get; private set; } = [];
 
     // 📄 MAPEOS ESPECÍFICOS POR TIPO DE CONTENIDO
     public Dictionary<int, MigratedPostInfo> BibliotecaMapping { get; private set; } = new();
@@ -80,6 +81,7 @@ internal class MappingService
         await LoadUserMappingAsync(connection);
         await LoadCategoryMappingAsync(connection, contentType);
         await LoadTagMappingAsync(connection, contentType);
+        await LoadTaxonomyMappingAsync(connection, contentType);
         await LoadRegionMappingAsync(connection);
         await LoadMediaMappingAsync(connection);
         _logger.LogSuccess($"✅ Mapeos básicos cargados");
@@ -185,6 +187,25 @@ internal class MappingService
         {
             _logger.LogWarning($"Error cargando tags: {ex.Message}");
             TagMapping = new Dictionary<int, int>();
+        }
+    }
+    private async Task LoadTaxonomyMappingAsync(MySqlConnection connection, ContentType? contentType)
+    {
+        try
+        {
+            string query = "SELECT drupal_taxonomy_id, wp_taxonomy_id FROM taxonomy_mapping WHERE drupal_taxonomy_id IS NOT NULL";
+            if (contentType.HasValue)
+            {
+                query += $" AND type = '{contentType.Value}'";
+            }
+            var mappings = await connection.QueryAsync<dynamic>(query);
+            TaxonomyMapping = mappings.ToDictionary(x => (int)x.drupal_taxonomy_id, x => (int)x.wp_taxonomy_id);
+            _logger.LogInfo($"   🏷️ Taxonomías: {TaxonomyMapping.Count:N0}");
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning($"Error cargando taxonomías: {ex.Message}");
+            TaxonomyMapping = [];
         }
     }
 
@@ -648,9 +669,26 @@ internal class MappingService
         });
         TagMapping[drupalId] = wordpressId;
     }
+
+    private async Task SaveTaxonomyMappingAsync(int drupalId, int wordpressId, string contentType)
+    {
+        const string insertQuery = @"
+            INSERT INTO taxonomy_mapping 
+            (drupal_taxonomy_id, wp_taxonomy_id,  type) 
+            VALUES (@DrupalId, @WordPressId,  @Type)
+            ON DUPLICATE KEY UPDATE 
+                wp_taxonomy_id = VALUES(wp_taxonomy_id),
+                type = VALUES(type)";
+        using var connection = new MySqlConnection(ConfiguracionGeneral.WPconnectionString);
+        await connection.ExecuteAsync(insertQuery, new
+        {
+            DrupalId = drupalId,
+            WordPressId = wordpressId,
+            Type = contentType
+        });
+        TaxonomyMapping[drupalId] = wordpressId;
+    }
     #endregion
-
-
     #region CREACION DE CONTENIDO
 
     /// <summary>
@@ -732,7 +770,7 @@ internal class MappingService
         string QueryNewTerm_tax_id = @"
              select term_taxonomy_id from wp_term_taxonomy where term_id = @id";
         MySqlTransaction transaction = null;
-        _logger.LogInfo($"Se va a crear el tag {TaxonomyName}");
+        _logger.LogInfo($"Se va a crear la taxonomia {TaxonomyName} con tipo {contentType}");
         using var connection = new MySqlConnection(ConfiguracionGeneral.WPconnectionString);
         try
         {
@@ -755,8 +793,8 @@ internal class MappingService
             }, transaction);
             await transaction.CommitAsync();
             //Aca obtener el term_taxonomy_id
-            var Term_tax_id = await connection.QueryFirstAsync<int>(QueryNewTerm_tax_id, new { id = termId }, transaction);
-            await SaveTagMappingAsync(drupalId, Term_tax_id, TaxonomyName, contentType);
+            var Term_tax_id = await connection.QueryFirstAsync<int>(QueryNewTerm_tax_id, new { id = termId });
+            await SaveTaxonomyMappingAsync(drupalId, Term_tax_id,  contentType);
             _logger.LogInfo($"Se agrego la taxonomia {TaxonomyName} con el id {termId}");
             return Term_tax_id;
         }
